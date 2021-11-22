@@ -12,67 +12,63 @@ import configparser
 import openpyxl.utils
 import requests.structures
 
+from canvashelpers import Config, Utils
+
 parser = argparse.ArgumentParser()
 parser.add_argument('url', nargs=1,
                     help='Please pass the URL of the assignment to retrieve quiz responses for. Output will be saved '
                          'as [assignment ID].xlsx')
-args = parser.parse_args()  # exits if no URL is provided
+args = parser.parse_args()  # exits if no assignment URL is provided
 
-CONFIG_FILE_PATH = '%s/canvas-helpers.config' % os.path.dirname(os.path.realpath(__file__))
-configparser = configparser.ConfigParser()
-configparser.read(CONFIG_FILE_PATH)
-CONFIG = configparser[configparser.sections()[0]]
-
+config_settings = Config.get_settings()
+LTI_INSTITUTION_SUBDOMAIN = config_settings['lti_institution_subdomain']
+LTI_BEARER_TOKEN = config_settings['lti_bearer_token']
 ROOT_INSTRUCTURE_DOMAIN = 'https://%s.quiz-%s-dub-prod.instructure.com/api'
-LTI_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (CONFIG['lti_institution_subdomain'], 'lti')
-QUIZ_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (CONFIG['lti_institution_subdomain'], 'api')
-print(LTI_API_ROOT)
+LTI_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'lti')
+QUIZ_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'api')
 
-ASSIGNMENT_URL = args.url[0]
+ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 ASSIGNMENT_ID = ASSIGNMENT_URL.split('/')[-1]  # used only for output spreadsheet title and filename
 OUTPUT_FILE = '%s.xlsx' % ASSIGNMENT_ID
-print('Exporting quiz results from assignment', ASSIGNMENT_URL, 'to', OUTPUT_FILE)
-ASSIGNMENT_URL = ASSIGNMENT_URL.replace('/courses', '/api/v1/courses')
+print('Exporting quiz results from assignment', args.url[0], 'to', OUTPUT_FILE)
 
-HTML_REGEX = re.compile('<.*?>')
+HTML_REGEX = re.compile('<.*?>')  # used to filter out HTML formatting from retrieved responses
 
 workbook = openpyxl.Workbook()
 spreadsheet = workbook.active
 spreadsheet.title = 'Quiz results (%s)' % ASSIGNMENT_ID
 spreadsheet.freeze_panes = 'A2'  # set the first row as a header
-spreadsheet_headers = ['Student name']
+spreadsheet_headers = ['Student number', 'Student name']
 spreadsheet_headers_set = False
 spreadsheet_row = 2  # 1-indexed; row 1 = headers
 
-submission_list_headers = requests.structures.CaseInsensitiveDict()
-submission_list_headers['accept'] = 'application/json'
-submission_list_headers['authorization'] = 'Bearer %s' % CONFIG['canvas_api_token']
-
-# TODO: properly handle pagination: https://canvas.instructure.com/doc/api/file.pagination.html
-# TODO: handle submission variants (submission_history parameter) - see: canvas.instructure.com/doc/api/submissions.html
-submission_list_response = requests.get('%s/submissions/?include[]=submission_history&per_page=1000' % ASSIGNMENT_URL,
-                                        headers=submission_list_headers)
+submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if submission_list_response.status_code != 200:
     print('Error in quiz submission list retrieval - did you set a valid Canvas API token?')
     exit()
 
 submission_list_json = json.loads(submission_list_response.text)
-session_ids = []
+user_session_ids = []
 for submission in submission_list_json:
     if 'external_tool_url' in submission:
-        session_ids.append(submission['external_tool_url'].split('participant_session_id=')[1].split('&')[0])
+        user_session_ids.append({'user_id': submission['user_id'],
+                                 'link': submission['external_tool_url'].split('participant_session_id=')[1].split('&')[
+                                     0]})
     else:
         pass  # normally a test student
-print('Loaded', len(submission_list_json), 'submission IDs:', session_ids)
+print('Loaded', len(user_session_ids), 'submission IDs:', user_session_ids)
+
+student_number_map = Utils.get_assignment_student_list(ASSIGNMENT_URL)
+print('Loaded', len(student_number_map), 'student number mappings:', student_number_map)
 
 token_headers = requests.structures.CaseInsensitiveDict()
 token_headers['accept'] = 'application/json'
-token_headers['authorization'] = ('%s' if 'Bearer ' in CONFIG['lti_bearer_token'] else 'Bearer %s') % CONFIG[
-    'lti_bearer_token']  # (in case the heading 'Bearer ' is copied as well as the token itself)
+token_headers['authorization'] = ('%s' if 'Bearer ' in LTI_BEARER_TOKEN else 'Bearer %s') % \
+                                 LTI_BEARER_TOKEN  # in case the heading 'Bearer ' is copied as well as the token itself
 
-for session_id in session_ids:
-    print('Requesting quiz sessions for participant', session_id)
-    token_response = requests.get('%s/participant_sessions/%s/grade' % (LTI_API_ROOT, session_id),
+for user_session_id in user_session_ids:
+    print('Requesting quiz sessions for participant', user_session_id)
+    token_response = requests.get('%s/participant_sessions/%s/grade' % (LTI_API_ROOT, user_session_id['link']),
                                   headers=token_headers)
     if token_response.status_code != 200:
         print('Error in quiz session retrieval - did you set a valid browser Bearer token?')
@@ -92,9 +88,11 @@ for session_id in session_ids:
         exit()
 
     submission_summary_json = json.loads(submission_response.text)
-    student_name = submission_summary_json['metadata']['user_full_name']
     results_id = submission_summary_json['authoritative_result']['id']
-    spreadsheet['A%d' % spreadsheet_row] = student_name
+    student_name = submission_summary_json['metadata']['user_full_name']
+    student_details = [s for s in student_number_map if s['user_id'] == user_session_id['user_id']]  # TODO
+    spreadsheet['A%d' % spreadsheet_row] = student_details[0]['student_number'] if len(student_details) == 1 else '-1'
+    spreadsheet['B%d' % spreadsheet_row] = student_name
     print('Loaded submission summary for', student_name, '-', results_id)
 
     quiz_questions_response = requests.get('%s/quiz_sessions/%d/session_items' % (QUIZ_API_ROOT, quiz_session_id),
@@ -106,7 +104,7 @@ for session_id in session_ids:
         headers=quiz_session_headers)
     quiz_answers_json = json.loads(quiz_answers_response.text)
 
-    answer_number = 2  # answer 1 is always the student's name
+    answer_number = 3  # answer 1 is always the student's name; 2 always their number
     for question in quiz_questions_json:
         question_id = question['item']['id']
         question_type = question['item']['user_response_type']
@@ -114,8 +112,6 @@ for session_id in session_ids:
 
         if not spreadsheet_headers_set:
             spreadsheet_headers.append(question_title)
-            column_letter = openpyxl.utils.get_column_letter(len(spreadsheet_headers))
-            spreadsheet['%s1' % column_letter] = question_title
 
         print()
         print(question_title)
@@ -174,7 +170,11 @@ for session_id in session_ids:
 
             answer_number += 1
 
-    spreadsheet_headers_set = True
+    if not spreadsheet_headers_set:
+        for header_number in range(1, len(spreadsheet_headers) + 1):  # spreadsheet indexes are 1-based
+            column_letter = openpyxl.utils.get_column_letter(header_number)
+            spreadsheet['%s1' % column_letter] = spreadsheet_headers[header_number - 1]
+        spreadsheet_headers_set = True
     spreadsheet_row += 1
 
 workbook.save(OUTPUT_FILE)

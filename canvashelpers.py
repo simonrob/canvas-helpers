@@ -1,3 +1,5 @@
+"""Utility functions for Canvas helper scripts."""
+
 import json
 import os
 

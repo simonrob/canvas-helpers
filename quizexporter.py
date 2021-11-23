@@ -1,14 +1,14 @@
 """Instructure recently enforced a switch from "Classic Quizzes" to "New Quizzes". The new version has far fewer
- features (see comparison: https://docs.google.com/document/d/11nSS2EP0UpSM6dcuEFnoF-hC6lyqWbE9JSHELNmfG2A/) and
- is far harder to use, but there seems to be little interest in improving it. Critically, it is not possible to
- export bulk responses in bulk, meaning that tasks which previously took minutes now take hours for larger class
- sizes. This script uses the Canvas API to work around that limitation, exporting all responses to a spreadsheet."""
+features (see comparison: https://docs.google.com/document/d/11nSS2EP0UpSM6dcuEFnoF-hC6lyqWbE9JSHELNmfG2A/) and is
+far harder to use for some tasks that were previously simple, but there seems to be little interest in improving it
+(see repeated forum complaints). Critically, it is not possible to export responses in bulk, meaning that tasks which
+previously took minutes can now take hours for larger class sizes. This script uses the Canvas API to work around that
+limitation, exporting all responses to a single spreadsheet."""
+
 import argparse
 import json
-import os
 import re
 
-import configparser
 import openpyxl.utils
 import requests.structures
 
@@ -44,7 +44,7 @@ spreadsheet_row = 2  # 1-indexed; row 1 = headers
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if submission_list_response.status_code != 200:
-    print('Error in quiz submission list retrieval - did you set a valid Canvas API token?')
+    print('Error in submission list retrieval - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
     exit()
 
 submission_list_json = json.loads(submission_list_response.text)
@@ -71,9 +71,11 @@ for user_session_id in user_session_ids:
     token_response = requests.get('%s/participant_sessions/%s/grade' % (LTI_API_ROOT, user_session_id['link']),
                                   headers=token_headers)
     if token_response.status_code != 200:
-        print('Error in quiz session retrieval - did you set a valid browser Bearer token?')
+        # TODO: there doesn't seem to be an API to get this token, but is there a better alternative to the current way?
+        print('Error in quiz session retrieval - did you set a valid browser Bearer token in %s?' % Config.FILE_PATH)
         exit()
 
+    # first we get a per-submission access token
     attempt_json = json.loads(token_response.text)
     quiz_session_headers = requests.structures.CaseInsensitiveDict()
     quiz_session_headers['accept'] = 'application/json'
@@ -81,6 +83,7 @@ for user_session_id in user_session_ids:
     quiz_session_id = attempt_json['quiz_api_quiz_session_id']
     print('Loaded quiz session', quiz_session_id)
 
+    # then a summary of the submission session and assignment overview
     submission_response = requests.get('%s/quiz_sessions/%d/' % (QUIZ_API_ROOT, quiz_session_id),
                                        headers=quiz_session_headers)
     if submission_response.status_code != 200:
@@ -90,21 +93,23 @@ for user_session_id in user_session_ids:
     submission_summary_json = json.loads(submission_response.text)
     results_id = submission_summary_json['authoritative_result']['id']
     student_name = submission_summary_json['metadata']['user_full_name']
-    student_details = [s for s in student_number_map if s['user_id'] == user_session_id['user_id']]  # TODO
+    student_details = [s for s in student_number_map if s['user_id'] == user_session_id['user_id']]
     spreadsheet['A%d' % spreadsheet_row] = student_details[0]['student_number'] if len(student_details) == 1 else '-1'
     spreadsheet['B%d' % spreadsheet_row] = student_name
     print('Loaded submission summary for', student_name, '-', results_id)
 
+    # then the actual quiz questions
     quiz_questions_response = requests.get('%s/quiz_sessions/%d/session_items' % (QUIZ_API_ROOT, quiz_session_id),
                                            headers=quiz_session_headers)
     quiz_questions_json = json.loads(quiz_questions_response.text)
 
+    # and finally the responses that were submitted
     quiz_answers_response = requests.get(
         '%s/quiz_sessions/%d/results/%s/session_item_results' % (QUIZ_API_ROOT, quiz_session_id, results_id),
         headers=quiz_session_headers)
     quiz_answers_json = json.loads(quiz_answers_response.text)
 
-    answer_number = 3  # answer 1 is always the student's name; 2 always their number
+    current_column = 3  # in our spreadsheet, column 1 is always the student's number; column 2 is always their name
     for question in quiz_questions_json:
         question_id = question['item']['id']
         question_type = question['item']['user_response_type']
@@ -124,14 +129,16 @@ for user_session_id in user_session_ids:
 
         if current_answer:
             if question_type == 'Text':
+                # text-based responses are simply recorded in the scored data
                 raw_answer = current_answer['scored_data']['value']
                 if raw_answer:
                     answer_text = re.sub(HTML_REGEX, '', raw_answer)
                     print(answer_text)
                     spreadsheet[
-                        '%s%d' % (openpyxl.utils.get_column_letter(answer_number), spreadsheet_row)] = answer_text
+                        '%s%d' % (openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
 
             elif question_type == 'Uuid':
+                # for other response types we have to cross-reference the list of choices available
                 matched_answer = None
                 for value in current_answer['scored_data']['value']:
                     if current_answer['scored_data']['value'][value]['user_responded']:
@@ -143,9 +150,10 @@ for user_session_id in user_session_ids:
                             answer_text = re.sub(HTML_REGEX, '', choice['item_body'])
                             print(answer_text)
                             spreadsheet['%s%d' % (
-                                openpyxl.utils.get_column_letter(answer_number), spreadsheet_row)] = answer_text
+                                openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
 
             elif question_type == 'MultipleResponse':
+                # (note that choice lists are unhelpfully stored in a range of different formats/structures...)
                 matched_answer = None
                 for value in current_answer['scored_data']['value']:
                     for response in current_answer['scored_data']['value'][value]['value']:
@@ -158,17 +166,17 @@ for user_session_id in user_session_ids:
                             answer_text = re.sub(HTML_REGEX, '', choice['item_body'])
                             print(answer_text)
                             spreadsheet['%s%d' % (
-                                openpyxl.utils.get_column_letter(answer_number), spreadsheet_row)] = answer_text
+                                openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
 
             else:
                 # TODO: handle any other response types
                 print('WARNING: quiz response type', question_type, 'not currently handled - skipping')
                 spreadsheet['%s%d' % (
-                    openpyxl.utils.get_column_letter(answer_number),
+                    openpyxl.utils.get_column_letter(current_column),
                     spreadsheet_row)] = 'DATA MISSING - NOT YET EXPORTED'
                 pass
 
-            answer_number += 1
+            current_column += 1
 
     if not spreadsheet_headers_set:
         for header_number in range(1, len(spreadsheet_headers) + 1):  # spreadsheet indexes are 1-based

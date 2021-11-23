@@ -1,3 +1,6 @@
+"""Canvas allows bulk assignment submission downloading, but does not provide any control over file naming. This
+script downloads an assignment's submissions and names them according to the submitter's login ID (student number)."""
+
 import argparse
 import json
 import os
@@ -54,6 +57,7 @@ for submission in submission_list_json:
                     print('Saved %s as %s.%s' % (document['url'], student_details['student_number'], extension))
                 else:
                     print('ERROR: download failed for submission from student', student_details, 'at', document['url'])
+                    break  # TODO: try next attachment instead (if one exists)
 
                 if len(submission_documents) > 1:
                     print('WARNING: ignoring all attachments after the first item for student', student_details)

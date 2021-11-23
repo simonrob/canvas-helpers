@@ -1,3 +1,7 @@
+"""It can often be useful to mark assignments and produce feedback text or attachments offline, rather than directly
+in Canvas. When doing so using the SpeedGrader it is very time-consuming to add these items one-by-one. This script
+lets you upload a set of attachments, feedback comments and marks in bulk."""
+
 import argparse
 import json
 import mimetypes
@@ -14,11 +18,13 @@ parser.add_argument('url', nargs=1,
 parser.add_argument('--attachment-extension', default='pdf',
                     help='The file extension of the attachments to upload (without the dot separator). These files '
                          'should be placed in the same directory as the script, named following the format '
-                         '[student number].[extension]. Default: \'pdf\'')
+                         '[student number].[extension]. Multiple attachments can be added by running the script '
+                         'repeatedly. Default: \'pdf\'')
 parser.add_argument('--marks-file', default=None,
                     help='An XLSX file containing a minimum of two columns: student number and mark. A third column '
                          'can be added for per-student feedback that will be added as a text comment, overriding the '
-                         'global attachment comment')
+                         'global attachment comment. To set a comment but not a mark, put a negative value (e.g., -1)'
+                         'in the mark column')
 parser.add_argument('--attachment-comment', default='See attached file',
                     help='The comment to add when attaching the feedback file. Overridden by any individual comments '
                          'in the imported marks file. Default: \'See attached file\'')
@@ -78,10 +84,13 @@ for user in submission_student_map:
               'submission' % (attachment_file, attachment_path, attachment_mime_type))
         attachment_file = None
 
+    # filter out unset fields, allowing any combination of mark/comment/attachment)
     attachment_comment = args.attachment_comment
     attachment_mark = None
     if user['student_number'] in marks_map:
         attachment_mark = marks_map[user['student_number']]['mark']
+        if attachment_mark < 0:
+            attachment_mark = None
         if 'comment' in marks_map[user['student_number']]:
             attachment_comment = marks_map[user['student_number']]['comment']
     elif attachment_file is None:
@@ -90,8 +99,8 @@ for user in submission_student_map:
 
     if args.dry_run:
         summary = 'post comment: \'%s\'' % attachment_comment
-        if user['student_number'] in marks_map:
-            summary = 'set mark to %d and %s' % (marks_map[user['student_number']]['mark'], summary)
+        if attachment_mark is not None:
+            summary = 'set mark to %d and %s' % (attachment_mark, summary)
         if attachment_file is not None:
             summary = 'upload file %s and %s' % (attachment_file, summary)
         print('DRY RUN: Student %s – would %s' % (user['student_number'], summary))
@@ -99,12 +108,15 @@ for user in submission_student_map:
 
     # TODO: test with group submissions (e.g., 'comment[group_comment]': True)
     comment_association_data = {'comment[text_comment]': attachment_comment}
+    if attachment_comment != args.attachment_comment:
+        print('Adding submission comment from spreadsheet:', attachment_comment)
 
-    if attachment_mark:
-        print('Adding submission mark/comment from spreadsheet:', attachment_mark, ' / ', attachment_comment)
+    if attachment_mark is not None:
+        print('Adding submission mark from spreadsheet:', attachment_mark)
         comment_association_data['submission[posted_grade]'] = attachment_mark
 
     if attachment_file is not None:
+        # if there is an attachment we first need to request an upload URL, then associate with a submission comment
         submission_form_data = {'name': attachment_file, 'content_type': attachment_mime_type}
         file_submission_url_response = requests.post('%s/comments/files' % user_submission_url,
                                                      data=submission_form_data, headers=Utils.canvas_api_headers())
@@ -128,8 +140,7 @@ for user in submission_student_map:
         print('\tAssociating uploaded file', file_submission_upload_json['id'], 'with new attachment comment')
         comment_association_data['comment[file_ids][]'] = file_submission_upload_json['id']
 
-    comment_association_response = requests.put(user_submission_url,
-                                                data=comment_association_data,
+    comment_association_response = requests.put(user_submission_url, data=comment_association_data,
                                                 headers=Utils.canvas_api_headers())
     if comment_association_response.status_code != 200:
         print('\tERROR: unable to add assignment mark/comment and associate attachment; skipping submission')

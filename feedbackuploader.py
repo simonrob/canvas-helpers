@@ -20,14 +20,30 @@ parser.add_argument('--attachment-extension', default='pdf',
                          'should be placed in the same directory as the script, named following the format '
                          '[student number].[extension]. Multiple attachments can be added by running the script '
                          'repeatedly. Default: \'pdf\'')
-parser.add_argument('--marks-file', default=None,
+parser.add_argument('--marks-file', default=None,  # TODO: support CSV
                     help='An XLSX file containing a minimum of two columns: student number and mark. A third column '
                          'can be added for per-student feedback that will be added as a text comment, overriding the '
                          'global attachment comment. To set a comment but not a mark, put a negative value (e.g., -1)'
-                         'in the mark column')
+                         'in the mark column. Please note that the mark must be on the same scale as that set in the '
+                         'coursework itself (i.e., the \'Display grade as percentage\' assignment setup option that '
+                         'allows entering a percentage regardless of how many marks are available does not apply here)')
 parser.add_argument('--attachment-comment', default='See attached file',
                     help='The comment to add when attaching the feedback file. Overridden by any individual comments '
                          'in the imported marks file. Default: \'See attached file\'')
+parser.add_argument('--groups', action='store_true',
+                    help='Use this option if the assignment is completed in groups and all members should receive the '
+                         'same mark and feedback. This changes the behaviour of the other options so that wherever a '
+                         'student number is expected, a group name is used instead. If you use this option, group '
+                         'names must be used instead of student numbers in both the feedback filenames and any '
+                         '`--marks-file` attachment, and these must be exactly as specified on Canvas. For example, if '
+                         'you have a Canvas group called \'Group 1\', name the attachment file \'Group 1.pdf\'; '
+                         '\'1.pdf\' will not work')
+parser.add_argument('--include-unsubmitted', action='store_true',
+                    help='Students who have not submitted an attachment for the assignment are skipped by default. Set '
+                         'this option if you want to add marks and/or feedback for these students as well. Note that '
+                         'that when not in `--groups` mode this will include any test students and/or staff enrolled '
+                         'as students, but this should not be an issue as you will not have provided a mark, comment '
+                         'or attachment for them')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes')
 args = parser.parse_args()  # exits if no assignment URL is provided
@@ -43,37 +59,62 @@ if args.marks_file is not None:
         marks_workbook = openpyxl.load_workbook(args.marks_file)
         marks_sheet = marks_workbook[marks_workbook.sheetnames[0]]
         for row in marks_sheet.iter_rows():
-            if type(row[1].value) is int:  # ultra-simplistic check to avoid any header rows: check mark is an integer
-                student_number = str(row[0].value)
-                marks_map[student_number] = {'mark': row[1].value}
-                if len(row) > 2:  # individual comment is optional
-                    marks_map[student_number]['comment'] = row[2].value
+            if not type(row[1].value) is str:  # ultra-simplistic check to avoid any header rows (marks are not strings)
+                student_number_or_group_name = str(row[0].value)
+                marks_map[student_number_or_group_name] = {'mark': row[1].value}
+                if len(row) > 2 and row[2].value is not None:  # individual comment is optional
+                    marks_map[student_number_or_group_name]['comment'] = row[2].value
         print('Loaded marks/feedback mapping for', len(marks_map), 'submissions:', marks_map)
     else:
         print('Ignoring marks file argument', args.marks_file, '- not found in current directory at', marks_file)
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
-if submission_list_response.status_code != 200:
+if not submission_list_response:
     print('Error in submission list retrieval - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
     exit()
 
-submission_list_json = json.loads(submission_list_response.text)
-submission_user_ids = []
+submission_list_json = json.loads(submission_list_response)
+filtered_submission_list = []
 for submission in submission_list_json:
-    if 'workflow_state' in submission and submission['workflow_state'] != 'unsubmitted':
-        submission_user_ids.append(submission['user_id'])
+    ignored_submission = False
+    # TODO: in group mode sometimes groups without submissions do not appear at all in the submission list - fixable?
+    if ('workflow_state' in submission and submission['workflow_state'] == 'unsubmitted') \
+            or 'workflow_state' not in submission:
+        if not args.include_unsubmitted:
+            ignored_submission = True
+
+    if args.groups and not ignored_submission:
+        if submission['group']['id'] is None:
+            ignored_submission = True
+        else:
+            for parsed_submission in filtered_submission_list:
+                if submission['group']['id'] == parsed_submission['group']['id']:
+                    ignored_submission = True
+                    break
+
+    if not ignored_submission:
+        filtered_submission_list.append(submission)
+print('Loaded', len(filtered_submission_list), 'valid submissions (discarded',
+      (len(submission_list_json) - len(filtered_submission_list)), 'duplicate, invalid or incomplete)')
+
+for submission in filtered_submission_list:
+    submitter = None
+    if args.groups:
+        if 'group' in submission:
+            submitter = {'canvas_user_id': submission['user_id'], 'canvas_group_id': submission['group']['id'],
+                         'group_name': submission['group']['name']}
+    elif 'user' in submission:
+        submitter = {'canvas_user_id': submission['user_id'], 'student_number': submission['user']['login_id'],
+                     'student_name': submission['user']['name']}
     else:
-        pass  # no submission (or test student)
-print('Loaded', len(submission_user_ids), 'submission user IDs:', submission_user_ids)
+        print('ERROR: submitter details not found for submission; skipping:', submission)
+        continue
 
-submission_student_map = Utils.get_assignment_student_list(ASSIGNMENT_URL, submission_user_ids)
-print('Mapped', len(submission_student_map), 'student numbers to submission IDs:', submission_student_map)
+    print('\nProcessing submission from', submitter)
+    user_submission_url = '%s/submissions/%d' % (ASSIGNMENT_URL, submitter['canvas_user_id'])
 
-for user in submission_student_map:
-    print('\nProcessing submission from', user)
-    user_submission_url = '%s/submissions/%d' % (ASSIGNMENT_URL, user['user_id'])
-
-    attachment_file = '%s.%s' % (user['student_number'], args.attachment_extension)
+    attachment_name = submitter['group_name'] if args.groups else submitter['student_number']
+    attachment_file = '%s.%s' % (attachment_name, args.attachment_extension)
     attachment_path = '%s/%s' % (os.path.dirname(os.path.realpath(__file__)), attachment_file)
     attachment_mime_type = mimetypes.guess_type(attachment_path)[0]
 
@@ -87,12 +128,12 @@ for user in submission_student_map:
     # filter out unset fields, allowing any combination of mark/comment/attachment)
     attachment_comment = args.attachment_comment
     attachment_mark = None
-    if user['student_number'] in marks_map:
-        attachment_mark = marks_map[user['student_number']]['mark']
+    if attachment_name in marks_map:
+        attachment_mark = marks_map[attachment_name]['mark']
         if attachment_mark < 0:
             attachment_mark = None
-        if 'comment' in marks_map[user['student_number']]:
-            attachment_comment = marks_map[user['student_number']]['comment']
+        if 'comment' in marks_map[attachment_name]:
+            attachment_comment = marks_map[attachment_name]['comment']
     elif attachment_file is None:
         print('Could not find attachment, mark or comment for submission (at least one item is required); skipping')
         continue
@@ -103,13 +144,17 @@ for user in submission_student_map:
             summary = 'set mark to %d and %s' % (attachment_mark, summary)
         if attachment_file is not None:
             summary = 'upload file %s and %s' % (attachment_file, summary)
-        print('DRY RUN: Student %s – would %s' % (user['student_number'], summary))
+        print('DRY RUN: %s \'%s\' – would %s' % ('Group' if args.groups else 'Student', attachment_name, summary))
         continue
 
-    # TODO: test with group submissions (e.g., 'comment[group_comment]': True)
+    # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.update
     comment_association_data = {'comment[text_comment]': attachment_comment}
+    if args.groups:
+        comment_association_data['comment[group_comment]'] = True
     if attachment_comment != args.attachment_comment:
         print('Adding submission comment from spreadsheet:', attachment_comment)
+    else:
+        print('Using default comment:', attachment_comment)
 
     if attachment_mark is not None:
         print('Adding submission mark from spreadsheet:', attachment_mark)

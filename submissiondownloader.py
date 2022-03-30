@@ -25,7 +25,7 @@ print('Downloading all submission documents from', args.url[0],
       'named as [student number].[file extension] and saved to', OUTPUT_DIRECTORY)
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
-if submission_list_response.status_code != 200:
+if not submission_list_response:
     print('Error in submission list retrieval - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
     exit()
 
@@ -38,6 +38,7 @@ for submission in submission_list_json:
         pass  # no submission (or test student)
 print('Loaded', len(submission_user_ids), 'submission user IDs:', submission_user_ids)
 
+# TODO: switch to student/group details from Utils.get_assignment_submissions to support downloading group submissions
 submission_student_map = Utils.get_assignment_student_list(ASSIGNMENT_URL, submission_user_ids)
 print('Mapped', len(submission_student_map), 'student numbers to submission IDs:', submission_student_map)
 

@@ -34,6 +34,7 @@ print('Exporting quiz results from assignment', args.url[0], 'to', OUTPUT_FILE)
 
 HTML_REGEX = re.compile('<.*?>')  # used to filter out HTML formatting from retrieved responses
 
+# TODO: add CSV export as an alternative
 workbook = openpyxl.Workbook()
 spreadsheet = workbook.active
 spreadsheet.title = 'Quiz results (%s)' % ASSIGNMENT_ID
@@ -43,7 +44,7 @@ spreadsheet_headers_set = False
 spreadsheet_row = 2  # 1-indexed; row 1 = headers
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
-if submission_list_response.status_code != 200:
+if not submission_list_response:
     print('Error in submission list retrieval - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
     exit()
 
@@ -58,6 +59,7 @@ for submission in submission_list_json:
         pass  # normally a test student
 print('Loaded', len(user_session_ids), 'submission IDs:', user_session_ids)
 
+# TODO: switch to student/group details from Utils.get_assignment_submissions to support downloading group submissions
 student_number_map = Utils.get_assignment_student_list(ASSIGNMENT_URL)
 print('Loaded', len(student_number_map), 'student number mappings:', student_number_map)
 

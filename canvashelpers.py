@@ -36,17 +36,30 @@ class Utils:
 
     @staticmethod
     def get_assignment_submissions(assignment_url):
-        # TODO: properly handle pagination: https://canvas.instructure.com/doc/api/file.pagination.html
-        # TODO: handle variants (submission_history parameter): canvas.instructure.com/doc/api/submissions.html
-        return requests.get('%s/submissions/?include[]=submission_history&per_page=1000' % assignment_url,
-                            headers=Utils.canvas_api_headers())
+        # TODO: handle variants (include[]=submission_history): canvas.instructure.com/doc/api/submissions.html
+        # TODO: does requesting group option when there are no groups cause any problems? (no issues seen so far)
+        # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.index
+        current_request_url = '%s/submissions?include%%5B%%5D=group&include%%5B%%5D=user&per_page=100' % assignment_url
+        response = '[]'
+        while True:  # TODO: do this better!
+            print('Requesting submissions page:', current_request_url)
+            current_response = requests.get(current_request_url, headers=Utils.canvas_api_headers())
+            response = response[:-1] + ',' + current_response.text[1:]
+
+            # see: https://canvas.instructure.com/doc/api/file.pagination.html
+            page_links = current_response.headers['Link']
+            if 'rel="next"' in page_links:
+                current_request_url = page_links.split('>; rel="next",<')[0].split('>; rel="current",<')[-1]
+            else:
+                return '[' + response[2:]
 
     @staticmethod
     def get_assignment_student_list(assignment_url, filter_submission_list=None):
-        # TODO: as above, properly handle pagination etc
-        # TODO: handle URLs properly (rather than splitting etc)
+        # NOTE: this is now superseded by a modification to get_assignment_submissions that returns more data; kept
+        # NOTE: for now in case of any issues with the new approach (which allows supporting groups where this didn't)
+        # TODO: as above, properly handle pagination etc; handle URLs properly (rather than splitting etc)
         user_list_response = requests.get(
-            '%s/users?include[]=enrollments&per_page=1000' % assignment_url.split('/assignments')[0],
+            '%s/users?include%%5B%%5D=enrollments&per_page=1000' % assignment_url.split('/assignments')[0],
             headers=Utils.canvas_api_headers())
         if user_list_response.status_code != 200:
             print('ERROR: unable to load assignment student list')

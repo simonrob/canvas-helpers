@@ -45,7 +45,7 @@ parser.add_argument('--include-unsubmitted', action='store_true',
                          'as students, but this should not be an issue as you will not have provided a mark, comment '
                          'or attachment for them')
 parser.add_argument('--dry-run', action='store_true',
-                    help='Preview the script\'s actions without actually making any changes')
+                    help='Preview the script\'s actions without actually making any changes. Highly recommended!')
 args = parser.parse_args()  # exits if no assignment URL is provided
 
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
@@ -74,39 +74,12 @@ if not submission_list_response:
     exit()
 
 submission_list_json = json.loads(submission_list_response)
-filtered_submission_list = []
-for submission in submission_list_json:
-    ignored_submission = False
-    # TODO: in group mode sometimes groups without submissions do not appear at all in the submission list - fixable?
-    if ('workflow_state' in submission and submission['workflow_state'] == 'unsubmitted') \
-            or 'workflow_state' not in submission:
-        if not args.include_unsubmitted:
-            ignored_submission = True
-
-    if args.groups and not ignored_submission:
-        if submission['group']['id'] is None:
-            ignored_submission = True
-        else:
-            for parsed_submission in filtered_submission_list:
-                if submission['group']['id'] == parsed_submission['group']['id']:
-                    ignored_submission = True
-                    break
-
-    if not ignored_submission:
-        filtered_submission_list.append(submission)
-print('Loaded', len(filtered_submission_list), 'valid submissions (discarded',
-      (len(submission_list_json) - len(filtered_submission_list)), 'duplicate, invalid or incomplete)')
+filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, args.groups,
+                                                               args.include_unsubmitted)
 
 for submission in filtered_submission_list:
-    submitter = None
-    if args.groups:
-        if 'group' in submission:
-            submitter = {'canvas_user_id': submission['user_id'], 'canvas_group_id': submission['group']['id'],
-                         'group_name': submission['group']['name']}
-    elif 'user' in submission:
-        submitter = {'canvas_user_id': submission['user_id'], 'student_number': submission['user']['login_id'],
-                     'student_name': submission['user']['name']}
-    else:
+    submitter = Utils.get_submitter_details(submission, args.groups)
+    if not submitter:
         print('ERROR: submitter details not found for submission; skipping:', submission)
         continue
 

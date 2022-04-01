@@ -48,7 +48,7 @@ if not submission_list_response:
     print('Error in submission list retrieval - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
     exit()
 
-submission_list_json = json.loads(submission_list_response.text)
+submission_list_json = json.loads(submission_list_response)
 user_session_ids = []
 for submission in submission_list_json:
     if 'external_tool_url' in submission:
@@ -59,7 +59,6 @@ for submission in submission_list_json:
         pass  # normally a test student
 print('Loaded', len(user_session_ids), 'submission IDs:', user_session_ids)
 
-# TODO: switch to student/group details from Utils.get_assignment_submissions to support downloading group submissions
 student_number_map = Utils.get_assignment_student_list(ASSIGNMENT_URL)
 print('Loaded', len(student_number_map), 'student number mappings:', student_number_map)
 
@@ -188,3 +187,4 @@ for user_session_id in user_session_ids:
     spreadsheet_row += 1
 
 workbook.save(OUTPUT_FILE)
+print('Saved', (spreadsheet_row - 1), 'quiz responses to', OUTPUT_FILE)

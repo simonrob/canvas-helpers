@@ -2,6 +2,11 @@
 in Canvas. When doing so using the SpeedGrader it is very time-consuming to add these items one-by-one. This script
 lets you upload a set of attachments, feedback comments and marks in bulk."""
 
+__author__ = 'Simon Robinson'
+__copyright__ = 'Copyright (c) 2022 Simon Robinson'
+__license__ = 'Apache 2.0'
+__version__ = '2022-04-01'  # ISO 8601 (YYYY-MM-DD)
+
 import argparse
 import json
 import mimetypes

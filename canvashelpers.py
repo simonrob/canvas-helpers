@@ -1,5 +1,10 @@
 """Utility functions for Canvas helper scripts."""
 
+__author__ = 'Simon Robinson'
+__copyright__ = 'Copyright (c) 2022 Simon Robinson'
+__license__ = 'Apache 2.0'
+__version__ = '2022-04-01'  # ISO 8601 (YYYY-MM-DD)
+
 import json
 import os
 

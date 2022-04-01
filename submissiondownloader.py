@@ -2,6 +2,11 @@
 script downloads an assignment's submissions and names them according to the submitter's Login ID (typically their
 institutional student number) or group name."""
 
+__author__ = 'Simon Robinson'
+__copyright__ = 'Copyright (c) 2022 Simon Robinson'
+__license__ = 'Apache 2.0'
+__version__ = '2022-04-01'  # ISO 8601 (YYYY-MM-DD)
+
 import argparse
 import json
 import os

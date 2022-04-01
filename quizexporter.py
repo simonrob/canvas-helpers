@@ -5,6 +5,11 @@ far harder to use for some tasks that were previously simple, but there seems to
 previously took minutes can now take hours for larger class sizes. This script uses the Canvas API to work around that
 limitation, exporting all responses to a single spreadsheet."""
 
+__author__ = 'Simon Robinson'
+__copyright__ = 'Copyright (c) 2022 Simon Robinson'
+__license__ = 'Apache 2.0'
+__version__ = '2022-04-01'  # ISO 8601 (YYYY-MM-DD)
+
 import argparse
 import json
 import re

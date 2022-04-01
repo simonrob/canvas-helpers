@@ -16,18 +16,27 @@ import requests
 from canvashelpers import Config, Utils
 
 parser = argparse.ArgumentParser()
-parser.add_argument('url', nargs=1, help='Please pass the URL of the assignment to download submissions for')
+parser.add_argument('url', nargs=1,
+                    help='Please pass the URL of the assignment to download submissions for. Files will be saved in a '
+                         'folder named [assignment ID] (see the `--working-directory` option to configure this)')
+parser.add_argument('--working-directory', default=None,
+                    help='The location to use for output (which will be created if it does not exist). '
+                         'Default: the same directory as this script')
 parser.add_argument('--groups', action='store_true', help='Use this option if the assignment is completed in groups')
 parser.add_argument('--multiple-attachments', action='store_true',
                     help='Use this option if there are multiple assignment attachments per student or group. This '
                          'will change the behaviour of the script so that a new subfolder is created for each '
                          'submission, named as the student\'s number or the group\'s name. The original filename '
-                         'will be used for each attachment that is downloaded')
+                         'will be used for each attachment that is downloaded. Without this option, any additional '
+                         'attachments will be ignored, and only the first file found will be downloaded')
 args = parser.parse_args()  # exits if no assignment URL is provided
 
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
-ASSIGNMENT_ID = ASSIGNMENT_URL.split('/')[-1]  # used only for output directory
-OUTPUT_DIRECTORY = '%s/%s' % (os.path.dirname(os.path.realpath(__file__)), ASSIGNMENT_ID)
+ASSIGNMENT_ID = Utils.get_assignment_id(ASSIGNMENT_URL)  # used only for output directory
+working_directory = os.path.dirname(
+    os.path.realpath(__file__)) if args.working_directory is None else args.working_directory
+os.makedirs(working_directory, exist_ok=True)
+OUTPUT_DIRECTORY = '%s/%s' % (working_directory, ASSIGNMENT_ID)
 if os.path.exists(OUTPUT_DIRECTORY):
     print('ERROR: assignment output directory', OUTPUT_DIRECTORY, 'already exists - please remove or rename')
     exit()

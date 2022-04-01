@@ -12,6 +12,7 @@ __version__ = '2022-04-01'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
+import os
 import re
 
 import openpyxl.utils
@@ -23,6 +24,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('url', nargs=1,
                     help='Please pass the URL of the assignment to retrieve quiz responses for. Output will be saved '
                          'as [assignment ID].xlsx')
+parser.add_argument('--working-directory', default=None,
+                    help='The location to use for output (which will be created if it does not exist). '
+                         'Default: the same directory as this script')
+parser.add_argument('--overwrite', action='store_true', help='Overwrite any existing output file')
 args = parser.parse_args()  # exits if no assignment URL is provided
 
 config_settings = Config.get_settings()
@@ -33,13 +38,19 @@ LTI_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'lti')
 QUIZ_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'api')
 
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
-ASSIGNMENT_ID = ASSIGNMENT_URL.split('/')[-1]  # used only for output spreadsheet title and filename
-OUTPUT_FILE = '%s.xlsx' % ASSIGNMENT_ID
+ASSIGNMENT_ID = Utils.get_assignment_id(ASSIGNMENT_URL)  # used only for output spreadsheet title and filename
+OUTPUT_DIRECTORY = os.path.dirname(
+    os.path.realpath(__file__)) if args.working_directory is None else args.working_directory
+os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
+OUTPUT_FILE = '%s/%s.xlsx' % (OUTPUT_DIRECTORY, ASSIGNMENT_ID)
+if os.path.exists(OUTPUT_FILE) and not args.overwrite:
+    print('ERROR: quiz result output file', OUTPUT_DIRECTORY, 'already exists - please remove or use `--overwrite`')
+    exit()
 print('Exporting quiz results from assignment', args.url[0], 'to', OUTPUT_FILE)
 
 HTML_REGEX = re.compile('<.*?>')  # used to filter out HTML formatting from retrieved responses
 
-# TODO: add CSV export as an alternative
+# TODO: add CSV export as an alternative (with care to handle multi-line values)
 workbook = openpyxl.Workbook()
 spreadsheet = workbook.active
 spreadsheet.title = 'Quiz results (%s)' % ASSIGNMENT_ID
@@ -192,4 +203,4 @@ for user_session_id in user_session_ids:
     spreadsheet_row += 1
 
 workbook.save(OUTPUT_FILE)
-print('Saved', (spreadsheet_row - 1), 'quiz responses to', OUTPUT_FILE)
+print('\nSaved', (spreadsheet_row - 2), 'quiz responses to', OUTPUT_FILE)

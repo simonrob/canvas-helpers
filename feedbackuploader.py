@@ -19,12 +19,21 @@ from canvashelpers import Config, Utils
 
 parser = argparse.ArgumentParser()
 parser.add_argument('url', nargs=1,
-                    help='Please pass the URL of the assignment to upload bulk feedback attachments for')
+                    help='Please pass the URL of the assignment to bulk upload feedback attachments for')
+parser.add_argument('--working-directory', default=None,
+                    help='The root directory to use for the script\'s operation. Within this directory, attachments '
+                         'and any `--marks-file` should be placed in a subfolder named as the assignment number (e.g., '
+                         'for an assignment at https://[canvas-domain]/courses/10000/assignments/123456, name the '
+                         'subfolder 123456). Default: the same directory as this script')
 parser.add_argument('--attachment-extension', default='pdf',
-                    help='The file extension of the attachments to upload (without the dot separator). These files '
-                         'should be placed in the same directory as the script, named following the format '
-                         '[student number].[extension]. Multiple attachments can be added by running the script '
+                    help='The file extension of the attachments to upload (without the dot separator). Attachments '
+                         'should be named following the format [student number].[extension] (or, in group mode, '
+                         '[group name].[extension]. Multiple attachments can be added by running the script '
                          'repeatedly. Default: \'pdf\'')
+parser.add_argument('--attachment-mime-type', default=None,
+                    help='Canvas requires a hint about the MIME type of the attachment file you are uploading. The '
+                         'script is able to guess the correct value in most cases, but if you are uploading a file '
+                         'with an unusual extension or format then you can specify a value here.')
 parser.add_argument('--marks-file', default=None,  # TODO: support CSV
                     help='An XLSX file containing a minimum of two columns: student number and mark. A third column '
                          'can be added for per-student feedback that will be added as a text comment, overriding the '
@@ -37,12 +46,10 @@ parser.add_argument('--attachment-comment', default='See attached file',
                          'in the imported marks file. Default: \'See attached file\'')
 parser.add_argument('--groups', action='store_true',
                     help='Use this option if the assignment is completed in groups and all members should receive the '
-                         'same mark and feedback. This changes the behaviour of the other options so that wherever a '
-                         'student number is expected, a group name is used instead. If you use this option, group '
-                         'names must be used instead of student numbers in both the feedback filenames and any '
-                         '`--marks-file` attachment, and these must be exactly as specified on Canvas. For example, if '
-                         'you have a Canvas group called \'Group 1\', name the attachment file \'Group 1.pdf\'; '
-                         '\'1.pdf\' will not work')
+                         'same mark and feedback. If you use this option, group names must be used instead of student '
+                         'numbers in both the feedback filenames and any `--marks-file` attachment, and these must be '
+                         'exactly as specified on Canvas. For example, if you have a Canvas group called \'Group 1\', '
+                         'name the attachment file \'Group 1.pdf\'; (\'1.pdf\' will not work)')
 parser.add_argument('--include-unsubmitted', action='store_true',
                     help='Students who have not submitted an attachment for the assignment are skipped by default. Set '
                          'this option if you want to add marks and/or feedback for these students as well. Note that '
@@ -54,12 +61,20 @@ parser.add_argument('--dry-run', action='store_true',
 args = parser.parse_args()  # exits if no assignment URL is provided
 
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
-print('%sUploading %s assignment feedback attachments to assignment %s with comment \'%s\'' % (
-    'DRY RUN: ' if args.dry_run else '', args.attachment_extension.upper(), args.url[0], args.attachment_comment))
+assignment_id = Utils.get_assignment_id(ASSIGNMENT_URL)
+INPUT_DIRECTORY = '%s/%s' % (
+    os.path.dirname(os.path.realpath(__file__)) if args.working_directory is None else args.working_directory,
+    assignment_id)
+if not os.path.exists(INPUT_DIRECTORY):
+    print('ERROR: input directory not found - please place all files to upload (and any `--marks-file`) in the '
+          'folder %s' % INPUT_DIRECTORY)
+    exit()
+print('%sUploading assignment feedback from %s to assignment %s' % (
+    'DRY RUN: ' if args.dry_run else '', INPUT_DIRECTORY, args.url[0]))
 
 marks_map = {}
 if args.marks_file is not None:
-    marks_file = '%s/%s' % (os.path.dirname(os.path.realpath(__file__)), args.marks_file)
+    marks_file = '%s/%s' % (INPUT_DIRECTORY, args.marks_file)
     if os.path.exists(marks_file):
         marks_workbook = openpyxl.load_workbook(args.marks_file)
         marks_sheet = marks_workbook[marks_workbook.sheetnames[0]]
@@ -71,7 +86,7 @@ if args.marks_file is not None:
                     marks_map[student_number_or_group_name]['comment'] = row[2].value
         print('Loaded marks/feedback mapping for', len(marks_map), 'submissions:', marks_map)
     else:
-        print('Ignoring marks file argument', args.marks_file, '- not found in current directory at', marks_file)
+        print('Ignoring marks file argument', args.marks_file, '- not found in assignment directory at', marks_file)
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if not submission_list_response:
@@ -93,14 +108,17 @@ for submission in filtered_submission_list:
 
     attachment_name = submitter['group_name'] if args.groups else submitter['student_number']
     attachment_file = '%s.%s' % (attachment_name, args.attachment_extension)
-    attachment_path = '%s/%s' % (os.path.dirname(os.path.realpath(__file__)), attachment_file)
-    attachment_mime_type = mimetypes.guess_type(attachment_path)[0]
+    attachment_path = '%s/%s' % (INPUT_DIRECTORY, attachment_file)
+    attachment_mime_type = args.attachment_mime_type if args.attachment_mime_type is not None else \
+        mimetypes.guess_type(attachment_path)[0]
 
-    if os.path.exists(attachment_path) and attachment_mime_type is not None:
-        print('Found submission attachment file', attachment_file, 'type', attachment_mime_type)
+    attachment_exists = os.path.exists(attachment_path)
+    if attachment_exists and attachment_mime_type is not None:
+        print('Found submission attachment file', attachment_file, 'with MIME type', attachment_mime_type)
     else:
-        print('Attachment %s at %s not found (or has unrecognised MIME type: %s); skipping attachment upload for this '
-              'submission' % (attachment_file, attachment_path, attachment_mime_type))
+        print('Attachment %s at %s %s; skipping upload for this submission' % (
+            attachment_file, attachment_path, ('not found' if not attachment_exists else
+                                               'is not a recognised MIME type - see `--attachment-mime-type` option')))
         attachment_file = None
 
     # filter out unset fields, allowing any combination of mark/comment/attachment)

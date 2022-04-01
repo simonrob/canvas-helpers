@@ -33,6 +33,10 @@ class Utils:
         return url.replace('/courses', '/api/v1/courses')
 
     @staticmethod
+    def get_assignment_id(assignment_url):
+        return assignment_url.rstrip('/').split('/')[-1]
+
+    @staticmethod
     def canvas_api_headers():
         submission_list_headers = requests.structures.CaseInsensitiveDict()
         submission_list_headers['accept'] = 'application/json'

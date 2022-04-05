@@ -5,9 +5,10 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2022 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2022-04-01'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2022-04-05'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
+import csv
 import json
 import mimetypes
 import os
@@ -34,16 +35,18 @@ parser.add_argument('--attachment-mime-type', default=None,
                     help='Canvas requires a hint about the MIME type of the attachment file you are uploading. The '
                          'script is able to guess the correct value in most cases, but if you are uploading a file '
                          'with an unusual extension or format then you can specify a value here.')
-parser.add_argument('--marks-file', default=None,  # TODO: support CSV
-                    help='An XLSX file containing a minimum of two columns: student number and mark. A third column '
-                         'can be added for per-student feedback that will be added as a text comment, overriding the '
-                         'global attachment comment. To set a comment but not a mark, put a negative value (e.g., -1)'
-                         'in the mark column. Please note that the mark must be on the same scale as that set in the '
-                         'coursework itself (i.e., the \'Display grade as percentage\' assignment setup option that '
-                         'allows entering a percentage regardless of how many marks are available does not apply here)')
+parser.add_argument('--marks-file', default=None,
+                    help='An XLSX or CSV file containing a minimum of two columns: student number and mark (in that '
+                         'order). A third column can be added for per-student feedback that will be added as a text '
+                         'comment, overriding the global `--attachment-comment`. To add a comment but not a mark, set '
+                         'a negative mark (e.g., -1). Please note that the mark must be on the same scale as that set '
+                         'in the coursework itself (i.e., the \'Display grade as percentage\' assignment setup option '
+                         'that allows entering a percentage regardless of how many marks are available does not apply '
+                         'here). The script tries to validate this, but is not always able to do so if marks are low.')
 parser.add_argument('--attachment-comment', default='See attached file',
                     help='The comment to add when attaching the feedback file. Overridden by any individual comments '
-                         'in the imported marks file. Default: \'See attached file\'')
+                         'in the imported marks file. The default value (\'See attached file\') will be skipped if '
+                         'there is no attachment, but in all other cases the comment will be added regardless.')
 parser.add_argument('--groups', action='store_true',
                     help='Use this option if the assignment is completed in groups and all members should receive the '
                          'same mark and feedback. If you use this option, group names must be used instead of student '
@@ -76,17 +79,34 @@ marks_map = {}
 if args.marks_file is not None:
     marks_file = '%s/%s' % (INPUT_DIRECTORY, args.marks_file)
     if os.path.exists(marks_file):
-        marks_workbook = openpyxl.load_workbook(args.marks_file)
-        marks_sheet = marks_workbook[marks_workbook.sheetnames[0]]
-        for row in marks_sheet.iter_rows():
-            if not type(row[1].value) is str:  # ultra-simplistic check to avoid any header rows (marks are not strings)
-                student_number_or_group_name = str(row[0].value)
-                marks_map[student_number_or_group_name] = {'mark': row[1].value}
-                if len(row) > 2 and row[2].value is not None:  # individual comment is optional
-                    marks_map[student_number_or_group_name]['comment'] = row[2].value
+        if marks_file.lower().endswith('.xlsx'):
+            marks_workbook = openpyxl.load_workbook(marks_file)
+            marks_sheet = marks_workbook[marks_workbook.sheetnames[0]]
+            for row in marks_sheet.iter_rows():
+                Utils.parse_marks_file_row(marks_map, [entry.value for entry in row])
+        else:
+            with open(marks_file, newline='') as marks_csv:
+                reader = csv.reader(marks_csv)
+                for row in reader:
+                    Utils.parse_marks_file_row(marks_map, row)
         print('Loaded marks/feedback mapping for', len(marks_map), 'submissions:', marks_map)
     else:
         print('Ignoring marks file argument', args.marks_file, '- not found in assignment directory at', marks_file)
+
+assignment_details_response = requests.get(ASSIGNMENT_URL, headers=Utils.canvas_api_headers())
+if assignment_details_response.status_code != 200:
+    print('Error retrieving assignment details - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
+    exit()
+assignment_details_json = json.loads(assignment_details_response.text)
+maximum_marks = assignment_details_json['points_possible']
+mark_exceeded = False
+for mark_row in marks_map:
+    if marks_map[mark_row]['mark'] > maximum_marks:
+        print('Error: marks file entry for', mark_row, 'awards more than the maximum', maximum_marks, 'marks available',
+              '-', marks_map[mark_row])
+        mark_exceeded = True
+if mark_exceeded:
+    exit()
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if not submission_list_response:
@@ -134,15 +154,6 @@ for submission in filtered_submission_list:
         print('Could not find attachment, mark or comment for submission (at least one item is required); skipping')
         continue
 
-    if args.dry_run:
-        summary = 'post comment: \'%s\'' % attachment_comment
-        if attachment_mark is not None:
-            summary = 'set mark to %d and %s' % (attachment_mark, summary)
-        if attachment_file is not None:
-            summary = 'upload file %s and %s' % (attachment_file, summary)
-        print('DRY RUN: %s \'%s\' – would %s' % ('Group' if args.groups else 'Student', attachment_name, summary))
-        continue
-
     # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.update
     comment_association_data = {'comment[text_comment]': attachment_comment}
     if args.groups:
@@ -150,11 +161,19 @@ for submission in filtered_submission_list:
     if attachment_comment != args.attachment_comment:
         print('Adding submission comment from spreadsheet:', attachment_comment)
     else:
-        print('Using default comment:', attachment_comment)
+        if attachment_file is None and attachment_comment == parser.get_default('attachment_comment'):
+            print('Skipping default comment \'', attachment_comment, '\' as no attachment is provided')
+            del comment_association_data['comment[text_comment]']
+        else:
+            print('Using attachment comment provided as script argument:', attachment_comment)
 
     if attachment_mark is not None:
         print('Adding submission mark from spreadsheet:', attachment_mark)
         comment_association_data['submission[posted_grade]'] = attachment_mark
+
+    if args.dry_run:
+        print('DRY RUN: skipping attachment upload and comment posting steps; moving to next submission')
+        continue
 
     if attachment_file is not None:
         # if there is an attachment we first need to request an upload URL, then associate with a submission comment

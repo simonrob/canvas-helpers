@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2022 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2022-04-01'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2022-04-05'  # ISO 8601 (YYYY-MM-DD)
 
 import json
 import os
@@ -61,7 +61,7 @@ class Utils:
             response = response[:-1] + ',' + current_response.text[1:]
 
             # see: https://canvas.instructure.com/doc/api/file.pagination.html
-            page_links = current_response.headers['Link']
+            page_links = current_response.headers['Link'] if 'Link' in current_response.headers else ''
             if 'rel="next"' in page_links:
                 current_request_url = page_links.split('>; rel="next",<')[0].split('>; rel="current",<')[-1]
             else:
@@ -160,3 +160,19 @@ class Utils:
                             student_number = user_profile_json['login_id']
                     submission_student_map.append({'student_number': student_number, 'user_id': user['id']})
         return submission_student_map
+
+    @staticmethod
+    def parse_marks_file_row(marks_map, row):
+        # ultra-simplistic check to avoid any header rows (headers are not normally numeric)
+        try:
+            grade = float(row[1])
+        except (ValueError, TypeError):
+            return
+
+        student_number_or_group_name = str(row[0])
+        marks_map_entry = {'mark': grade}
+        if len(row) > 2 and row[2]:  # individual comment is optional
+            marks_map_entry['comment'] = row[2]
+
+        if student_number_or_group_name is not None:
+            marks_map[student_number_or_group_name] = marks_map_entry

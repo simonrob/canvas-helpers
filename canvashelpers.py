@@ -3,12 +3,13 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2022 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2022-04-05'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2022-04-06'  # ISO 8601 (YYYY-MM-DD)
 
 import json
 import os
 
 import configparser
+import re
 
 import requests.structures
 
@@ -33,8 +34,20 @@ class Utils:
         return url.replace('/courses', '/api/v1/courses')
 
     @staticmethod
+    def course_url_to_speedgrader(url, add_student_id=None):
+        speedgrader_url = url.replace('assignments/', 'gradebook/speed_grader?assignment_id=')
+        if add_student_id:
+            speedgrader_url += '&student_id=' + str(add_student_id)
+        return speedgrader_url
+
+    @staticmethod
     def get_assignment_id(assignment_url):
         return assignment_url.rstrip('/').split('/')[-1]
+
+    @staticmethod
+    def ordered_strings(text):
+        # used to sort a list of numbers and/or names in a more natural order
+        return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
 
     @staticmethod
     def canvas_api_headers():
@@ -80,7 +93,8 @@ class Utils:
             type_hint='assignment submissions list')
 
     @staticmethod
-    def filter_assignment_submissions(submission_list_json, groups_mode=False, include_unsubmitted=False):
+    def filter_assignment_submissions(submission_list_json, groups_mode=False, include_unsubmitted=False,
+                                      sort_entries=False):
         """Filter a list of submissions (in parsed JSON format). Setting groups_mode to True will remove any users who
         are not in a group, and skip any duplicates (which occur because Canvas associates group submissions with each
         group member individually). Setting include_unsubmitted to True will include all entries, even those that do
@@ -105,8 +119,15 @@ class Utils:
 
             if not ignored_submission:
                 filtered_submission_list.append(submission)
-        print('Loaded', len(filtered_submission_list), 'valid submissions (discarded',
-              (len(submission_list_json) - len(filtered_submission_list)), 'duplicate, invalid or incomplete)')
+
+        if sort_entries:
+            filtered_submission_list = sorted(filtered_submission_list,
+                                              key=lambda entry: Utils.ordered_strings(
+                                                  entry['group']['name'] if groups_mode else entry['user']['login_id']))
+
+        print('Loaded', 'and sorted' if sort_entries else '', len(filtered_submission_list), 'valid submissions',
+              '(discarded', (len(submission_list_json) - len(filtered_submission_list)),
+              'duplicate, invalid or incomplete)')
         return filtered_submission_list
 
     @staticmethod

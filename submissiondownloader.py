@@ -5,12 +5,14 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2022 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2022-04-01'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2022-04-06'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
+import csv
 import json
 import os
 
+import openpyxl.utils
 import requests
 
 from canvashelpers import Config, Utils
@@ -22,6 +24,11 @@ parser.add_argument('url', nargs=1,
 parser.add_argument('--working-directory', default=None,
                     help='The location to use for output (which will be created if it does not exist). '
                          'Default: the same directory as this script')
+parser.add_argument('--speedgrader-file', default=None,
+                    help='Set this option to `XLSX` or `CSV` to create a file in the specified format containing '
+                         'students\' (or groups\') names, IDs (both Canvas and institutional) and a link to the '
+                         'SpeedGrader page for the assignment, which is useful when marking activities such as '
+                         'presentations or ad hoc tasks. No attachments are downloaded in this mode')
 parser.add_argument('--groups', action='store_true', help='Use this option if the assignment is completed in groups')
 parser.add_argument('--multiple-attachments', action='store_true',
                     help='Use this option if there are multiple assignment attachments per student or group. This '
@@ -41,12 +48,19 @@ if os.path.exists(OUTPUT_DIRECTORY):
     print('ERROR: assignment output directory', OUTPUT_DIRECTORY, 'already exists - please remove or rename')
     exit()
 os.mkdir(OUTPUT_DIRECTORY)
-output_format = '[student number].[uploaded file extension]'
-if args.groups:
-    output_format = '[group name].[uploaded file extension]'
-if args.multiple_attachments:
-    output_format = '[group name]/[original uploaded filename]'
-print('Downloading all submission documents from', args.url[0], 'named as', output_format, 'to', OUTPUT_DIRECTORY)
+
+speedgrader_file = None
+speedgrader_output = []
+if args.speedgrader_file and args.speedgrader_file.lower() in ['xlsx', 'csv']:
+    speedgrader_file = '%s/speedgrader.%s' % (OUTPUT_DIRECTORY, args.speedgrader_file.lower())
+    print('Creating a course roster file with SpeedGrader links from', args.url[0], 'at', speedgrader_file)
+else:
+    output_format = '[student number].[uploaded file extension]'
+    if args.groups:
+        output_format = '[group name].[uploaded file extension]'
+    if args.multiple_attachments:
+        output_format = '[group name]/[original uploaded filename]'
+    print('Downloading all submission documents from', args.url[0], 'named as', output_format, 'to', OUTPUT_DIRECTORY)
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if not submission_list_response:
@@ -54,13 +68,24 @@ if not submission_list_response:
     exit()
 
 submission_list_json = json.loads(submission_list_response)
-
-filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, args.groups)
+filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, groups_mode=args.groups,
+                                                               sort_entries=True)
 
 for submission in filtered_submission_list:
     submitter = Utils.get_submitter_details(submission, args.groups)
     if not submitter:
         print('ERROR: submitter details not found for submission; skipping:', submission)
+        continue
+
+    if speedgrader_file:
+        speedgrader_link = Utils.course_url_to_speedgrader(args.url[0], submitter['canvas_user_id'])
+        if speedgrader_file.endswith('xlsx'):
+            speedgrader_link = '=hyperlink("%s")' % speedgrader_link
+        if args.groups:
+            speedgrader_output.append([submitter['group_name'], submitter['canvas_group_id'], speedgrader_link])
+        else:
+            speedgrader_output.append(
+                [submitter['student_number'], submitter['student_name'], submitter['canvas_user_id'], speedgrader_link])
         continue
 
     if 'attachments' in submission:
@@ -99,3 +124,25 @@ for submission in filtered_submission_list:
                 break
     else:
         print('ERROR: unable to locate attachment for submission from', submitter, '- skipping')
+
+if speedgrader_file:
+    if args.groups:
+        spreadsheet_headers = ['Group name', 'Canvas group ID', 'Speedgrader link']
+    else:
+        spreadsheet_headers = ['Student number', 'Student name', 'Canvas user ID', 'Speedgrader link']
+
+    if speedgrader_file.endswith('xlsx'):
+        workbook = openpyxl.Workbook()
+        spreadsheet = workbook.active
+        spreadsheet.title = 'Course roster (%s)' % ASSIGNMENT_ID
+        spreadsheet.freeze_panes = 'A2'  # set the first row as a header
+        spreadsheet.append(spreadsheet_headers)
+        for row in speedgrader_output:
+            spreadsheet.append(row)
+        workbook.save(speedgrader_file)
+
+    elif speedgrader_file.endswith('csv'):
+        with open(speedgrader_file, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(spreadsheet_headers)
+            writer.writerows(speedgrader_output)

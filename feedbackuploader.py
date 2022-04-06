@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2022 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2022-04-05'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2022-04-06'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -114,8 +114,9 @@ if not submission_list_response:
     exit()
 
 submission_list_json = json.loads(submission_list_response)
-filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, args.groups,
-                                                               args.include_unsubmitted)
+filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, groups_mode=args.groups,
+                                                               include_unsubmitted=args.include_unsubmitted,
+                                                               sort_entries=True)
 
 for submission in filtered_submission_list:
     submitter = Utils.get_submitter_details(submission, args.groups)

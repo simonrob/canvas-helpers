@@ -3,9 +3,9 @@ in Canvas. When doing so using the SpeedGrader it is very time-consuming to add 
 lets you upload a set of attachments, feedback comments and marks in bulk."""
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2022 Simon Robinson'
+__copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2022-04-06'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-21'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -65,7 +65,7 @@ args = parser.parse_args()  # exits if no assignment URL is provided
 
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 assignment_id = Utils.get_assignment_id(ASSIGNMENT_URL)
-INPUT_DIRECTORY = '%s/%s' % (
+INPUT_DIRECTORY = os.path.join(
     os.path.dirname(os.path.realpath(__file__)) if args.working_directory is None else args.working_directory,
     assignment_id)
 if not os.path.exists(INPUT_DIRECTORY):
@@ -77,7 +77,7 @@ print('%sUploading assignment feedback from %s to assignment %s' % (
 
 marks_map = {}
 if args.marks_file is not None:
-    marks_file = '%s/%s' % (INPUT_DIRECTORY, args.marks_file)
+    marks_file = os.path.join(INPUT_DIRECTORY, args.marks_file)
     if os.path.exists(marks_file):
         if marks_file.lower().endswith('.xlsx'):
             marks_workbook = openpyxl.load_workbook(marks_file)
@@ -95,14 +95,14 @@ if args.marks_file is not None:
 
 assignment_details_response = requests.get(ASSIGNMENT_URL, headers=Utils.canvas_api_headers())
 if assignment_details_response.status_code != 200:
-    print('Error retrieving assignment details - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
+    print('ERROR: unable to get assignment details - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
     exit()
 assignment_details_json = json.loads(assignment_details_response.text)
 maximum_marks = assignment_details_json['points_possible']
 mark_exceeded = False
 for mark_row in marks_map:
     if marks_map[mark_row]['mark'] > maximum_marks:
-        print('Error: marks file entry for', mark_row, 'awards more than the maximum', maximum_marks, 'marks available',
+        print('ERROR: marks file entry for', mark_row, 'awards more than the maximum', maximum_marks, 'marks available',
               '-', marks_map[mark_row])
         mark_exceeded = True
 if mark_exceeded:
@@ -110,7 +110,7 @@ if mark_exceeded:
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if not submission_list_response:
-    print('Error in submission list retrieval - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
+    print('ERROR: unable to retrieve submission list; aborting')
     exit()
 
 submission_list_json = json.loads(submission_list_response)
@@ -119,9 +119,9 @@ filtered_submission_list = Utils.filter_assignment_submissions(submission_list_j
                                                                sort_entries=True)
 
 for submission in filtered_submission_list:
-    submitter = Utils.get_submitter_details(submission, args.groups)
+    submitter = Utils.get_submitter_details(submission, groups_mode=args.groups)
     if not submitter:
-        print('ERROR: submitter details not found for submission; skipping:', submission)
+        print('WARNING: submitter details not found for submission; skipping:', submission)
         continue
 
     print('\nProcessing submission from', submitter)
@@ -129,7 +129,7 @@ for submission in filtered_submission_list:
 
     attachment_name = submitter['group_name'] if args.groups else submitter['student_number']
     attachment_file = '%s.%s' % (attachment_name, args.attachment_extension)
-    attachment_path = '%s/%s' % (INPUT_DIRECTORY, attachment_file)
+    attachment_path = os.path.join(INPUT_DIRECTORY, attachment_file)
     attachment_mime_type = args.attachment_mime_type if args.attachment_mime_type is not None else \
         mimetypes.guess_type(attachment_path)[0]
 

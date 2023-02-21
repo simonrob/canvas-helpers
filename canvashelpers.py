@@ -1,21 +1,20 @@
 """Utility functions for Canvas helper scripts."""
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2022 Simon Robinson'
+__copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2022-04-06'  # ISO 8601 (YYYY-MM-DD)
-
-import json
-import os
+__version__ = '2023-02-21'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
+import json
+import os
 import re
 
 import requests.structures
 
 
 class Config:
-    FILE_PATH = '%s/canvashelpers.config' % os.path.dirname(os.path.realpath(__file__))
+    FILE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'canvashelpers.config')
 
     configparser = configparser.ConfigParser()
     configparser.read(FILE_PATH)
@@ -42,7 +41,7 @@ class Utils:
 
     @staticmethod
     def get_assignment_id(assignment_url):
-        return assignment_url.rstrip('/').split('/')[-1]
+        return int(assignment_url.rstrip('/').split('/')[-1])
 
     @staticmethod
     def ordered_strings(text):
@@ -57,15 +56,18 @@ class Utils:
         return submission_list_headers
 
     @staticmethod
-    def canvas_multi_page_request(current_request_url, type_hint='API'):
+    def canvas_multi_page_request(current_request_url, params=None, type_hint='API'):
         """Retrieve a full (potentially multi-page) response from the Canvas API. If the initial response refers to
         subsequent pages of results, these are loaded and concatenated automatically. For (slightly) more specific
         progress/error messages, set type_hint to a string describing the API call that is being made """
         # TODO: do this better!
+        if not params:
+            params = {}
+        params['per_page'] = 100
         response = '[]'
         while True:
             print('Requesting', type_hint, 'page:', current_request_url)
-            current_response = requests.get(current_request_url, headers=Utils.canvas_api_headers())
+            current_response = requests.get(current_request_url, params=params, headers=Utils.canvas_api_headers())
             if current_response.status_code != 200:
                 print('ERROR: unable to load complete', type_hint, 'response - status code',
                       current_response.status_code)
@@ -81,16 +83,32 @@ class Utils:
                 return '[' + response[2:]
 
     @staticmethod
-    def get_assignment_submissions(assignment_url):
+    def get_course_users(course_url, includes=None, enrolment_types=None):
+        """Get a list of users in a course, returning a string that can be parsed as JSON. This function is simply
+        a wrapper around Utils.canvas_multi_page_request, but is kept to separate the API parameter complexity from
+        the scripts that use this method"""
+        params = {'enrollment_type[]': ['student'] if not enrolment_types else enrolment_types}
+        if includes:
+            params['include[]'] = []
+            for param in includes:
+                params['include[]'].append(param)
+        return Utils.canvas_multi_page_request('%s/users' % course_url, params=params,
+                                               type_hint='course users list')
+
+    @staticmethod
+    def get_assignment_submissions(assignment_url, includes=None):
         """Get a list of assignment submissions, returning a string that can be parsed as JSON. This function is simply
         a wrapper around Utils.canvas_multi_page_request, but is kept to separate the API parameter complexity from
         the scripts that use this method"""
         # TODO: handle variants (include[]=submission_history): canvas.instructure.com/doc/api/submissions.html
         # TODO: does requesting group option when there are no groups cause any problems? (no issues seen so far)
         # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.index
-        return Utils.canvas_multi_page_request(
-            '%s/submissions?include%%5B%%5D=group&include%%5B%%5D=user&per_page=100' % assignment_url,
-            type_hint='assignment submissions list')
+        params = {'include[]': []}
+        includes = ['user', 'group'] + (includes if includes else [])
+        for param in includes:
+            params['include[]'].append(param)
+        return Utils.canvas_multi_page_request('%s/submissions' % assignment_url, params=params,
+                                               type_hint='assignment submissions list')
 
     @staticmethod
     def filter_assignment_submissions(submission_list_json, groups_mode=False, include_unsubmitted=False,
@@ -150,12 +168,12 @@ class Utils:
 
     @staticmethod
     def get_assignment_student_list(assignment_url):
-        """For a given assignment, get the list students it is assigned to. In most cases it is better to use
+        """For a given assignment, get the list of students it is assigned to. In most cases it is better to use
         Utils.get_assignment_submissions, which returns users as part of its main response. However, the New Quizzes
         API does not return Login IDs, so for that script this method is used to match submissions instead"""
-        user_list_response = Utils.canvas_multi_page_request(
-            '%s/users?include%%5B%%5D=enrollments&per_page=100' % assignment_url.split('/assignments')[0],
-            type_hint='assignment student list')
+        params = {'include[]': ['enrollments']}
+        user_list_response = Utils.canvas_multi_page_request('%s/users' % assignment_url.split('/assignments')[0],
+                                                             params=params, type_hint='assignment student list')
         if not user_list_response:
             return None
 

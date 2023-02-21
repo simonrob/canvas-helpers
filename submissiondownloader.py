@@ -3,9 +3,9 @@ script downloads an assignment's submissions and names them according to the sub
 institutional student number) or group name."""
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2022 Simon Robinson'
+__copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2022-04-06'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-21'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -43,7 +43,7 @@ ASSIGNMENT_ID = Utils.get_assignment_id(ASSIGNMENT_URL)  # used only for output 
 working_directory = os.path.dirname(
     os.path.realpath(__file__)) if args.working_directory is None else args.working_directory
 os.makedirs(working_directory, exist_ok=True)
-OUTPUT_DIRECTORY = '%s/%s' % (working_directory, ASSIGNMENT_ID)
+OUTPUT_DIRECTORY = '%s/%d' % (working_directory, ASSIGNMENT_ID)
 if os.path.exists(OUTPUT_DIRECTORY):
     print('ERROR: assignment output directory', OUTPUT_DIRECTORY, 'already exists - please remove or rename')
     exit()
@@ -64,7 +64,7 @@ else:
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if not submission_list_response:
-    print('Error in submission list retrieval - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
+    print('ERROR: unable to retrieve submission list - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
     exit()
 
 submission_list_json = json.loads(submission_list_response)
@@ -72,7 +72,7 @@ filtered_submission_list = Utils.filter_assignment_submissions(submission_list_j
                                                                sort_entries=True)
 
 for submission in filtered_submission_list:
-    submitter = Utils.get_submitter_details(submission, args.groups)
+    submitter = Utils.get_submitter_details(submission, groups_mode=args.groups)
     if not submitter:
         print('ERROR: submitter details not found for submission; skipping:', submission)
         continue
@@ -91,7 +91,7 @@ for submission in filtered_submission_list:
     if 'attachments' in submission:
         submission_output_directory = OUTPUT_DIRECTORY
         if args.multiple_attachments:
-            submission_output_directory = '%s/%s' % (
+            submission_output_directory = os.path.join(
                 OUTPUT_DIRECTORY, submitter['group_name' if args.groups else 'student_number'])
             if os.path.exists(submission_output_directory):
                 print('ERROR: output directory', submission_output_directory,
@@ -104,11 +104,11 @@ for submission in filtered_submission_list:
             file_download_response = requests.get(document['url'])
             if file_download_response.status_code == 200:
                 if args.multiple_attachments:
-                    output_filename = '%s/%s' % (submission_output_directory, document['filename'])
+                    output_filename = os.path.join(submission_output_directory, document['filename'])
                 else:
-                    output_filename = '%s/%s.%s' % (
-                        submission_output_directory, submitter['group_name' if args.groups else 'student_number'],
-                        document['filename'].split('.')[-1])
+                    output_filename = os.path.join(submission_output_directory, '%s.%s' % (
+                        submitter['group_name' if args.groups else 'student_number'],
+                        document['filename'].split('.')[-1]))
 
                 with open(output_filename, 'wb') as output_file:
                     output_file.write(file_download_response.content)
@@ -134,7 +134,7 @@ if speedgrader_file:
     if speedgrader_file.endswith('xlsx'):
         workbook = openpyxl.Workbook()
         spreadsheet = workbook.active
-        spreadsheet.title = 'Course roster (%s)' % ASSIGNMENT_ID
+        spreadsheet.title = 'Course roster (%d)' % ASSIGNMENT_ID
         spreadsheet.freeze_panes = 'A2'  # set the first row as a header
         spreadsheet.append(spreadsheet_headers)
         for row in speedgrader_output:

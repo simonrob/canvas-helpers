@@ -6,9 +6,9 @@ previously took minutes can now take hours for larger class sizes. This script u
 limitation, exporting all responses to a single spreadsheet."""
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2022 Simon Robinson'
+__copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2022-04-01'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-21'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -42,7 +42,7 @@ ASSIGNMENT_ID = Utils.get_assignment_id(ASSIGNMENT_URL)  # used only for output 
 OUTPUT_DIRECTORY = os.path.dirname(
     os.path.realpath(__file__)) if args.working_directory is None else args.working_directory
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
-OUTPUT_FILE = '%s/%s.xlsx' % (OUTPUT_DIRECTORY, ASSIGNMENT_ID)
+OUTPUT_FILE = os.path.join(OUTPUT_DIRECTORY, '%d.xlsx' % ASSIGNMENT_ID)
 if os.path.exists(OUTPUT_FILE) and not args.overwrite:
     print('ERROR: quiz result output file', OUTPUT_DIRECTORY, 'already exists - please remove or use `--overwrite`')
     exit()
@@ -53,7 +53,7 @@ HTML_REGEX = re.compile('<.*?>')  # used to filter out HTML formatting from retr
 # TODO: add CSV export as an alternative (with care to handle multi-line values)
 workbook = openpyxl.Workbook()
 spreadsheet = workbook.active
-spreadsheet.title = 'Quiz results (%s)' % ASSIGNMENT_ID
+spreadsheet.title = 'Quiz results (%d)' % ASSIGNMENT_ID
 spreadsheet.freeze_panes = 'A2'  # set the first row as a header
 spreadsheet_headers = ['Student number', 'Student name']
 spreadsheet_headers_set = False
@@ -61,7 +61,7 @@ spreadsheet_row = 2  # 1-indexed; row 1 = headers
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if not submission_list_response:
-    print('Error in submission list retrieval - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
+    print('ERROR: unable to retrieve submission list - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
     exit()
 
 submission_list_json = json.loads(submission_list_response)
@@ -89,7 +89,7 @@ for user_session_id in user_session_ids:
                                   headers=token_headers)
     if token_response.status_code != 200:
         # TODO: there doesn't seem to be an API to get this token, but is there a better alternative to the current way?
-        print('Error in quiz session retrieval - did you set a valid browser Bearer token in %s?' % Config.FILE_PATH)
+        print('ERROR: unable to load quiz session - did you set a valid browser Bearer token in %s?' % Config.FILE_PATH)
         exit()
 
     # first we get a per-submission access token
@@ -104,7 +104,7 @@ for user_session_id in user_session_ids:
     submission_response = requests.get('%s/quiz_sessions/%d/' % (QUIZ_API_ROOT, quiz_session_id),
                                        headers=quiz_session_headers)
     if submission_response.status_code != 200:
-        print('Error in quiz metadata retrieval - aborting')
+        print('ERROR: unable to load quiz metadata - aborting')
         exit()
 
     submission_summary_json = json.loads(submission_response.text)

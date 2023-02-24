@@ -7,7 +7,7 @@ any existing data lost*) if it is present."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-21'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-24'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -72,7 +72,7 @@ else:
 # only users with a 'student' enrolment are part of a course's Gradebook
 course_user_response = Utils.get_course_users(COURSE_URL, enrolment_types=['student'])
 if not course_user_response:
-    print('ERROR: unable to retrieve course user list; aborting')
+    print('ERROR: unable to retrieve course student list; aborting')
     exit()
 
 course_user_json = json.loads(course_user_response)

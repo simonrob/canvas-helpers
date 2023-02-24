@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-21'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-24'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import json
@@ -38,6 +38,10 @@ class Utils:
         if add_student_id:
             speedgrader_url += '&student_id=' + str(add_student_id)
         return speedgrader_url
+
+    @staticmethod
+    def get_course_id(course_url):
+        return int(course_url.split('courses/')[-1].split('/')[0])
 
     @staticmethod
     def get_assignment_id(assignment_url):

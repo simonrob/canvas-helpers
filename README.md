@@ -30,6 +30,11 @@ See `python3 submissiondownloader.py --help` for further options.
 This script helps run an offline version of this process using spreadsheets uploaded to a Canvas assignment, and handles both form generation and mark scaling.
 See `python3 webpamanager.py --help` for further instructions.
 
+- [Conversation creator](conversationcreator.py): This script allows you to send personalised or generic conversation messages to individual students on a course.
+Messages can also include a unique attachment file.
+Usage: Place your attachment files in the script's working directory, named according to students' Canvas Login IDs (typically their institutional student numbers), then run `python3 conversationcreator.py [course URL]`.
+See `python3 conversationcreator.py --help` for further options.
+
 - [Quiz result exporter](quizexporter.py): When using quizzes as assignments that need review or processing of some form (rather than just predetermined correct/incorrect responses), the "New Quizzes" feature on Canvas is far worse than the old version, and—most importantly, for large class sizes—does not allow bulk response export.
 After significant community resistance, Canvas developers Instructure have now [relented](https://community.canvaslms.com/t5/Quizzes-Transition/Transparency-into-Quizzes-Planning/ta-p/502615) and may at some point implement this missing feature.
 In the meantime, this script allows you to export all quiz responses to an XLSX spreadsheet.
@@ -37,6 +42,7 @@ Usage: `python3 quizexporter.py [assignment URL]`
 
 ## Additional resources
 - [Python module for working with the Canvas API](https://canvasapi.readthedocs.io/en/stable/index.html)
+- [Python version of the Canvas SDK](https://github.com/penzance/canvas_python_sdk/)
 - [Canvas API reference](https://canvas.instructure.com/doc/api/index.html)
 - [Canvancement](https://github.com/jamesjonesmath/canvancement): JavaScript extensions for Canvas
 - [Pages Data Merge](https://iworkautomation.com/pages/script-tags-data-merge.html): Create Pages/PDF documents automatically from a Numbers spreadsheet

@@ -5,7 +5,7 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-21'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-27'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -71,7 +71,10 @@ submission_list_json = json.loads(submission_list_response)
 filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, groups_mode=args.groups,
                                                                sort_entries=True)
 
+download_count = 0
+download_total = len(filtered_submission_list)
 for submission in filtered_submission_list:
+    download_count += 1
     submitter = Utils.get_submitter_details(submission, groups_mode=args.groups)
     if not submitter:
         print('ERROR: submitter details not found for submission; skipping:', submission)
@@ -112,7 +115,8 @@ for submission in filtered_submission_list:
 
                 with open(output_filename, 'wb') as output_file:
                     output_file.write(file_download_response.content)
-                print('Saved %s as %s' % (document['url'], output_filename.replace(OUTPUT_DIRECTORY + '/', '')))
+                print('Saved %s as %s (%d of %d)' % (document['url'], output_filename.replace(OUTPUT_DIRECTORY, '')[1:],
+                                                     download_count, download_total))
 
             else:
                 print('ERROR: download failed for submission from', submitter, 'at', document['url'], '; aborting')

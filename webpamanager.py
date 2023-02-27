@@ -13,12 +13,13 @@ Example usage:
    (note that grades need to be posted before students can see comments, but posting only graded submissions makes *all*
    comments visible, which is sufficient). Gather contribution form responses via a separate individual assignment.
 5) Mark the group assignment as normal
-6) Use the `submissiondownloader` script to retrieve contribution forms, then use this script to adjust grades"""
+6) Use the `submissiondownloader` script to retrieve contribution forms, then use this script to calculate adjusted
+   grades. Use the feedbackuploader script to add the scaled marks from this script's output (webpa-final-marks.xlsx)"""
 
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-24'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-27'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -68,6 +69,11 @@ parser.add_argument('--mark-rounding', type=float, default=0.5,
 parser.add_argument('--maximum-mark', type=float, default=100,
                     help='The maximum possible mark for the assignment that this exercise is being applied to, used to '
                          'cap adjusted marks. Only applies when not in `--setup` mode. Default: 100')
+parser.add_argument('--context-summaries', action='store_true',
+                    help='If set, the script will add two columns to the results spreadsheet: `Errors` summarises '
+                         'processing issues when forms were submitted but found to be invalid, and `Comment` provides '
+                         'a ready-made summary of the submission that can be provided to each submitting student. Only '
+                         'applies when not in `--setup` mode')
 parser.add_argument('--working-directory', default=None,
                     help='The location to use for processing and output (which will be created if it does not exist). '
                          'In normal mode this directory is assumed to contain all of the individual student responses '
@@ -305,7 +311,7 @@ for file in response_files:
     else:
         print('ERROR: skipping invalid form', file, '-', current_errors)
         skipped_files.append(file)
-response_summary_file = os.path.join(WORKING_DIRECTORY, 'response-summary.xlsx')
+response_summary_file = os.path.join(WORKING_DIRECTORY, 'webpa-response-summary.xlsx')
 response_summary_workbook.save(response_summary_file)
 print('Processed', len(response_files) - len(skipped_files), 'valid submissions; combined responses saved to',
       response_summary_file)
@@ -374,26 +380,58 @@ response_data.loc[response_data['Mark'] > args.maximum_mark, 'Mark'] = args.maxi
 rounding_factor = 1 / args.mark_rounding  # e.g., 0.5 -> 2 to round to nearest 0.5
 response_data['Mark'] = (response_data['Mark'] * rounding_factor).round().astype(int) / rounding_factor
 response_data['Scaled'] = response_data.apply(lambda x: 'Y' if x['Original'] != x['Mark'] else '', axis=1)
-response_data['Errors'] = None
+if args.context_summaries:
+    response_data['Errors'] = None
+    response_data['Comment'] = None
 
-# 8) save to a calculation result file, highlighting errors, missing data and scaled values
-# response_data.to_excel(output_file, sheet_name='WebPA calculation')
-output_file = os.path.join(WORKING_DIRECTORY, 'response-calculation.xlsx')
+# 8) save to a calculation result file, highlighting errors, missing data and scaled values, and context if requested
+output_file = os.path.join(WORKING_DIRECTORY, 'webpa-calculation.xlsx')
 writer = pandas.ExcelWriter(output_file, engine='openpyxl')
 response_data.to_excel(writer, sheet_name='WebPA calculation')
-for row in writer.book.active.iter_rows(min_row=2, min_col=2, max_col=13):
-    print([r.value for r in row])
-    for key in submission_errors.keys():
-        if row[0].value == key:
-            row[11].value = '; '.join(submission_errors[key])  # doesn't seem to be an easy way to do this with pandas
-            break
+
 for row in writer.book.active.iter_rows(min_row=2, min_col=3, max_col=3):
     if not row[0].value:
         row[0].fill = openpyxl.styles.PatternFill(start_color='00FFC7CE', end_color='00FFC7CE', fill_type='solid')
 for row in writer.book.active.iter_rows(min_row=2, min_col=12, max_col=12):
     if row[0].value == 'Y':
         row[0].fill = openpyxl.styles.PatternFill(start_color='00FFB97F', end_color='00FFB97F', fill_type='solid')
+
+if args.context_summaries:
+    for row in writer.book.active.iter_rows(min_row=2, min_col=2, max_col=14):
+        for key in submission_errors.keys():
+            if row[0].value == key:
+                row[11].value = '; '.join(submission_errors[key])  # doesn't seem to be an easy way to do with pandas
+                break
+        for file in response_files:
+            if row[0].value == file.split('.')[0]:
+                row[12].value = 'You submitted a valid contribution form.'
+                break
+        if not row[12].value:
+            if row[11].value:
+                row[12].value = 'You submitted a contribution form, but it was invalid for the following reason(s): '
+                row[12].value += row[11].value + '.'
+            else:
+                row[12].value = 'You did not submit a contribution form.'
+
 writer.close()
 
-print('Successfully calculated WebPA scores and saved to', output_file, '- summary:')
+print('Successfully calculated WebPA scores and saved calculation to', output_file, '- summary:')
 print(response_data)
+
+# because we add comments using openpyxl, we need to reopen the workbook to save the final version with comments
+scaled_marks_file = os.path.join(WORKING_DIRECTORY, 'webpa-final-marks.xlsx')
+scaled_marks_title = 'WebPA results'
+if args.context_summaries:
+    result_summary_workbook = openpyxl.load_workbook(output_file)
+    result_summary_sheet = result_summary_workbook[result_summary_workbook.sheetnames[0]]
+    result_summary_sheet.title = scaled_marks_title
+    for merge in list(result_summary_sheet.merged_cells):  # need to unmerge or subject column inherits group merge
+        result_summary_sheet.unmerge_cells(range_string=str(merge))
+    result_summary_sheet.delete_cols(12, 2)  # calculation comments (remove in reverse to preserve index numbers)
+    result_summary_sheet.delete_cols(3, 8)  # calculation details
+    result_summary_sheet.delete_cols(1, 1)  # group number
+    result_summary_workbook.save(scaled_marks_file)
+else:
+    result_summary = response_data.filter(['Subject', 'Mark'], axis=1)
+    result_summary.to_excel(scaled_marks_file, sheet_name=scaled_marks_title)
+print('Saved WebPA-adjusted marks to', scaled_marks_file)

@@ -4,7 +4,7 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-24'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-27'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -41,12 +41,66 @@ parser.add_argument('--conversation-subject', default='Course message',
 parser.add_argument('--conversation-message', default='See attached file',
                     help='The conversation message to be sent. The default value is \'See attached file\', but this '
                          'can be overridden via this parameter or `--comments-file`. Use \\n for linebreaks')
+parser.add_argument('--delete-after-sending', action='store_true',
+                    help='Sending messages using this script can fill up your Sent folder. If that is an issue, use '
+                         'this parameter to remove sent messages after sending. This only affects your own view of the '
+                         'conversation; the message will remain in the recipient\'s Inbox, and if they reply you will '
+                         'still see the original context')
+parser.add_argument('--delete-conversation-attachments', action='store_true',
+                    help='Sending many messages with attachments will quickly fill up the very small (52.4MB) default '
+                         'Canvas per-user storage allowance. It is time-consuming to use the web interface to remove '
+                         'files and restore space; instead, running the script with this parameter will remove *all* '
+                         'files in your account\'s `conversation attachments` folder. If this parameter is set, all '
+                         'others except `--dry-run` are ignored, and the script will exit after completion.')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
 args = parser.parse_args()  # exits if no assignment URL is provided
 
 COURSE_URL = Utils.course_url_to_api(args.url[0])
 COURSE_ID = Utils.get_course_id(COURSE_URL)
+API_ROOT = COURSE_URL.split('/courses')[0]
+
+# deleting files is a separate mode
+if args.delete_conversation_attachments:
+    folder_name = 'conversation attachments'
+    print('DRY RUN:' if args.dry_run else '', 'removing all files from your `%s` folder' % folder_name)
+
+    attachments_response = requests.get('%s/users/self/folders/by_path/%s' % (API_ROOT, folder_name),
+                                        headers=Utils.canvas_api_headers())
+    if attachments_response.status_code != 200:
+        print('ERROR: unable to find your `%s` folder; aborting' % folder_name)
+        exit()
+    attachments_folder = json.loads(attachments_response.text)[-1]  # resolve provides the requested folder last
+    if attachments_folder['name'] != folder_name:
+        print('ERROR: unable to match your `%s` folder; aborting' % folder_name)
+        exit()
+
+    folder_id = attachments_folder['id']
+    user_files = Utils.canvas_multi_page_request('%s/users/self/files' % API_ROOT, type_hint='files')
+    if not user_files:
+        print('No files found in your user account; nothing to do')
+        exit()
+
+    user_files_json = json.loads(user_files)
+    files_to_delete = []
+    for file in user_files_json:
+        if file['folder_id'] == folder_id:
+            files_to_delete.append(file['id'])
+
+    if len(files_to_delete) > 0:
+        print('DRY RUN: would delete' if args.dry_run else 'Deleting', len(files_to_delete),
+              'files from your `%s` folder' % folder_name)
+        if args.dry_run:
+            exit()
+        for file_id in files_to_delete:
+            delete_request = requests.delete('%s/files/%d' % (API_ROOT, file_id),
+                                             headers=Utils.canvas_api_headers())
+            if delete_request.status_code == 200:
+                print('Deleted file', delete_request.text)
+    else:
+        print('No files found in your `%s` folder; nothing to do' % folder_name)
+    exit()
+
 INPUT_DIRECTORY = os.path.join(
     os.path.dirname(os.path.realpath(__file__)) if args.working_directory is None else args.working_directory,
     str(COURSE_ID))
@@ -54,8 +108,9 @@ if not os.path.exists(INPUT_DIRECTORY):
     print('ERROR: input directory not found - please place all files to upload (and any `--comments-file`) in the '
           'folder %s' % INPUT_DIRECTORY)
     exit()
-print('%sCreating conversations for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))
+print('%screating conversations for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))
 
+# load and parse comments
 comments_map = {}
 if args.comments_file is not None:
     comments_file = os.path.join(INPUT_DIRECTORY, args.comments_file)
@@ -82,8 +137,7 @@ if not course_user_response:
     exit()
 course_user_json = json.loads(course_user_response)
 
-self_id_response = requests.get('%s/users/self/' % COURSE_URL.split('/courses')[0],
-                                headers=Utils.canvas_api_headers())
+self_id_response = requests.get('%s/users/self/' % API_ROOT, headers=Utils.canvas_api_headers())
 if self_id_response.status_code != 200:
     print('ERROR: unable to retrieve your Canvas ID; aborting')
 SELF_ID = (json.loads(self_id_response.text))['id']
@@ -137,7 +191,7 @@ for user in course_user_json:
         print('Using conversation message provided as script argument:', conversation_message)
 
     if args.dry_run:
-        print('DRY RUN: skipping attachment upload and message posting steps; moving to next recipient')
+        print('DRY RUN: skipping attachment upload and message posting/deletion steps; moving to next recipient')
         continue
 
     if attachment_file is not None:
@@ -150,8 +204,8 @@ for user in course_user_json:
             # clashing names are overwritten, and the old version shows as deleted to its original recipients)
             # 'on_duplicate': 'rename'
         }
-        file_submission_url_response = requests.post('%s/users/self/files' % COURSE_URL.split('/courses')[0],
-                                                     data=submission_form_data, headers=Utils.canvas_api_headers())
+        file_submission_url_response = requests.post('%s/users/self/files' % API_ROOT, data=submission_form_data,
+                                                     headers=Utils.canvas_api_headers())
         if file_submission_url_response.status_code != 200:
             print('\tERROR: unable to retrieve attachment upload URL; skipping submission')
             continue
@@ -172,10 +226,19 @@ for user in course_user_json:
         print('\tAssociating uploaded file', file_submission_upload_json['id'], 'with conversation')
         conversation_data['attachment_ids[]'] = file_submission_upload_json['id']
 
-    comment_association_response = requests.post('%s/conversations' % COURSE_URL.split('/courses')[0],
-                                                 data=conversation_data, headers=Utils.canvas_api_headers())
-    if comment_association_response.status_code != 201:
+    message_creation_response = requests.post('%s/conversations' % API_ROOT, data=conversation_data,
+                                              headers=Utils.canvas_api_headers())
+    if message_creation_response.status_code != 201:
         print('\tERROR: unable to send conversation message and/or associate attachment; skipping recipient')
         continue
 
-    print('\tComment successfully sent to user', canvas_id, ';', student_number)
+    print('\tMessage successfully sent to user', canvas_id, '(%s)' % student_number)
+
+    if args.delete_after_sending:
+        sent_message = json.loads(message_creation_response.text)
+        message_deletion_response = requests.delete('%s/conversations/%d' % (API_ROOT, sent_message[0]['id']),
+                                                    headers=Utils.canvas_api_headers())
+        if message_deletion_response.status_code == 200:
+            print('\tRemoved message from your Sent items folder')
+        else:
+            print('\tUnable to remove message from your sent items folder:', message_deletion_response.text)

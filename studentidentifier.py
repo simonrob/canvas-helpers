@@ -7,7 +7,7 @@ any existing data lost*) if it is present."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-24'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-27'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -27,7 +27,7 @@ parser.add_argument('--dry-run', action='store_true',
 args = parser.parse_args()  # exits if no assignment URL is provided
 
 COURSE_URL = Utils.course_url_to_api(args.url[0])
-print('%sCreating Student Number column for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))
+print('%screating Student Number column for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))
 
 # need to check existing columns - only one private ('teacher_notes') column is allowed per course
 # example: {'title': 'Notes', 'position': 1, 'teacher_notes': True, 'read_only': False, 'id': 100, 'hidden': False}

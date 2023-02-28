@@ -285,16 +285,16 @@ for file in response_files:
                 current_errors.append(
                     '%s rating %s' % ('Own' if cells[2] == current_rater else 'Member %s' % cells[2],
                                       'invalid (\'%s\')' % cells[3] if cells[3] else 'missing'))
-                cells[3] = 0  # just to avoid crashes in bounding - we discard the file; this value is not actually used
                 invalid_file = True
 
-            bounded_score = round(max(min(cells[3], 5), 1))  # don't allow WebPA scores outside the 1-5 (int) range
-            if bounded_score != cells[3]:
-                current_errors.append(
-                    'Rating %s for %s is outside of range 1-5 (rounded to %d)' % (cells[3], cells[2], bounded_score))
+            if not invalid_file:
+                bounded_score = round(max(min(cells[3], 5), 1))  # don't allow WebPA scores outside the 1-5 (int) range
+                if bounded_score != cells[3]:
+                    current_errors.append('Rating %s for %s is outside of range 1-5 (rounded to %d)' % (
+                        cells[3], cells[2], bounded_score))
 
-            current_responses.append([None, cells[2], bounded_score, None, current_group])
-            current_total += bounded_score
+                current_responses.append([None, cells[2], bounded_score, None, current_group])
+                current_total += bounded_score
 
     if not current_rater:
         current_errors.append('Own name indicator missing')

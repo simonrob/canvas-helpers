@@ -55,6 +55,10 @@ parser.add_argument('--groups', action='store_true',
                          'numbers in both the feedback filenames and any `--marks-file` attachment, and these must be '
                          'exactly as specified on Canvas. For example, if you have a Canvas group called \'Group 1\', '
                          'name the attachment file \'Group 1.pdf\'; (\'1.pdf\' will not work)')
+parser.add_argument('--groups-individual', action='store_true',
+                    help='Use this option if the assignment is completed in groups, and it is configured to give group '
+                         'members marks and feedback individually, but all members should receive the same mark and '
+                         'feedback. The same marks file and attachment naming requirements as `--groups` mode apply.')
 parser.add_argument('--include-unsubmitted', action='store_true',
                     help='Students who have not submitted an attachment for the assignment are skipped by default. Set '
                          'this option if you want to add marks and/or feedback for these students as well. Note that '
@@ -116,20 +120,24 @@ if not submission_list_response:
     exit()
 
 submission_list_json = json.loads(submission_list_response)
-filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, groups_mode=args.groups,
+filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json,
+                                                               groups_mode=args.groups and not args.groups_individual,
                                                                include_unsubmitted=args.include_unsubmitted,
                                                                sort_entries=True)
 
+submission_count = 0
+submission_total = len(filtered_submission_list)
 for submission in filtered_submission_list:
-    submitter = Utils.get_submitter_details(submission, groups_mode=args.groups)
+    submission_count += 1
+    submitter = Utils.get_submitter_details(submission, groups_mode=args.groups or args.groups_individual)
     if not submitter:
         print('WARNING: submitter details not found for submission; skipping:', submission)
         continue
 
-    print('\nProcessing submission from', submitter)
+    print('\nProcessing submission', submission_count, 'of', submission_total, 'from', submitter)
     user_submission_url = '%s/submissions/%d' % (ASSIGNMENT_URL, submitter['canvas_user_id'])
 
-    attachment_name = submitter['group_name'] if args.groups else submitter['student_number']
+    attachment_name = submitter['group_name'] if args.groups or args.groups_individual else submitter['student_number']
     attachment_file = '%s.%s' % (attachment_name, args.attachment_extension)
     attachment_path = os.path.join(INPUT_DIRECTORY, attachment_file)
     attachment_mime_type = args.attachment_mime_type if args.attachment_mime_type is not None else \
@@ -162,17 +170,17 @@ for submission in filtered_submission_list:
         print('No entry found in mark/comment spreadsheet for', attachment_name)
 
     # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.update
-    comment_association_data = {'comment[text_comment]': attachment_comment}
-    if args.groups:
+    comment_association_data = {'comment[text_comment]': attachment_comment.replace('\\n', '\n')}
+    if args.groups and not args.groups_individual:
         comment_association_data['comment[group_comment]'] = True
     if attachment_comment != args.attachment_comment:
-        print('Adding submission comment from spreadsheet:', attachment_comment)
+        print('Adding submission comment from spreadsheet:', attachment_comment.replace('\n', '\\n'))
     else:
         if attachment_file is None and attachment_comment == parser.get_default('attachment_comment'):
             print('Skipping default comment \'', attachment_comment, '\' as no attachment is provided')
             del comment_association_data['comment[text_comment]']
         else:
-            print('Using attachment comment provided as script argument:', attachment_comment)
+            print('Using attachment comment provided as script argument:', attachment_comment.replace('\n', '\\n'))
 
     if attachment_mark is not None:
         comment_association_data['submission[posted_grade]'] = attachment_mark

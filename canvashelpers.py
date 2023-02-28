@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-24'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-28'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import json
@@ -64,7 +64,6 @@ class Utils:
         """Retrieve a full (potentially multi-page) response from the Canvas API. If the initial response refers to
         subsequent pages of results, these are loaded and concatenated automatically. For (slightly) more specific
         progress/error messages, set type_hint to a string describing the API call that is being made """
-        # TODO: do this better!
         if not params:
             params = {}
         params['per_page'] = 100
@@ -81,8 +80,9 @@ class Utils:
 
             # see: https://canvas.instructure.com/doc/api/file.pagination.html
             page_links = current_response.headers['Link'] if 'Link' in current_response.headers else ''
-            if 'rel="next"' in page_links:
-                current_request_url = page_links.split('>; rel="next",<')[0].split('>; rel="current",<')[-1]
+            next_page_match = re.search(r',\s*<(?P<next>.*?)>;\s*rel="next"', page_links)
+            if next_page_match:
+                current_request_url = next_page_match.group('next')
             else:
                 return '[' + response[2:]
 
@@ -163,8 +163,8 @@ class Utils:
         submitter = None
         if groups_mode:
             if 'group' in submission:
-                submitter = {'canvas_user_id': submission['user_id'], 'canvas_group_id': submission['group']['id'],
-                             'group_name': submission['group']['name']}
+                submitter = {'canvas_user_id': submission['user_id'], 'student_number': submission['user']['login_id'],
+                             'canvas_group_id': submission['group']['id'], 'group_name': submission['group']['name']}
         elif 'user' in submission:
             submitter = {'canvas_user_id': submission['user_id'], 'student_number': submission['user']['login_id'],
                          'student_name': submission['user']['name']}

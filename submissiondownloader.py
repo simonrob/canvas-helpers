@@ -5,10 +5,12 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-27'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-28'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
+import datetime
+import functools
 import json
 import os
 
@@ -71,6 +73,13 @@ submission_list_json = json.loads(submission_list_response)
 filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, groups_mode=args.groups,
                                                                sort_entries=True)
 
+
+def compare_attachment_dates(a1, a2):
+    a1_created = int(datetime.datetime.fromisoformat(a1['created_at'].replace('Z', '+00:00')).timestamp())
+    a2_created = int(datetime.datetime.fromisoformat(a2['created_at'].replace('Z', '+00:00')).timestamp())
+    return a2_created - a1_created  # sort in descending order of creation date
+
+
 download_count = 0
 download_total = len(filtered_submission_list)
 for submission in filtered_submission_list:
@@ -103,6 +112,7 @@ for submission in filtered_submission_list:
             os.mkdir(submission_output_directory)
 
         submission_documents = submission['attachments']
+        submission_documents.sort(key=functools.cmp_to_key(compare_attachment_dates))  # newest attachment is now first
         for document in submission_documents:
             file_download_response = requests.get(document['url'])
             if file_download_response.status_code == 200:
@@ -123,7 +133,7 @@ for submission in filtered_submission_list:
                 break  # TODO: try next attachment instead? (if one exists)
 
             if len(submission_documents) > 1 and not args.multiple_attachments:
-                print('WARNING: ignoring all attachments after the first item for submission from', submitter,
+                print('WARNING: ignoring all attachments after the newest item for submission from', submitter,
                       '- did you mean to enable --multiple-attachments mode?')
                 break
     else:

@@ -19,7 +19,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-27'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-28'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -220,6 +220,7 @@ if args.marks_file is not None:
     else:
         print('ERROR: unable to load marks mapping from', args.marks_file, '- not found in assignment directory at',
               marks_file, '; aborting')
+        exit()
 
 # next, load responses and create a master spreadsheet containing all rater responses
 response_files = [f for f in os.listdir(WORKING_DIRECTORY) if re.match(r'\d+\.xlsx', f)]
@@ -313,8 +314,8 @@ for file in response_files:
         skipped_files.append(file)
 response_summary_file = os.path.join(WORKING_DIRECTORY, 'webpa-response-summary.xlsx')
 response_summary_workbook.save(response_summary_file)
-print('Processed', len(response_files) - len(skipped_files), 'valid submissions; combined responses saved to',
-      response_summary_file)
+print('Processed', len(response_files) - len(skipped_files), 'valid submissions of', len(response_files), 'total;',
+      'combined responses saved to', response_summary_file)
 print('Skipped', len(skipped_files), 'invalid or tampered submissions from:', [f.split('.')[0] for f in skipped_files])
 response_files = [f for f in response_files if f not in skipped_files]  # remove invalid files from response calculation
 if len(response_files) <= 0:
@@ -378,7 +379,12 @@ response_data.loc[response_data['Variance'] >= args.minimum_variance, 'Weighted'
 response_data['Mark'] = response_data['Weighted']
 response_data.loc[response_data['Mark'] > args.maximum_mark, 'Mark'] = args.maximum_mark
 rounding_factor = 1 / args.mark_rounding  # e.g., 0.5 -> 2 to round to nearest 0.5
-response_data['Mark'] = (response_data['Mark'] * rounding_factor).round().astype(int) / rounding_factor
+try:
+    response_data['Mark'] = (response_data['Mark'] * rounding_factor).round().astype(int) / rounding_factor
+except pandas.errors.IntCastingNaNError:
+    print('ERROR: unable to round marks, probably due to a group name mismatch. Have you correctly named groups in the',
+          '`--marks-file` provided? (Note that group names must exactly match the names used on Canvas)')
+    raise
 response_data['Scaled'] = response_data.apply(lambda x: 'Y' if x['Original'] != x['Mark'] else '', axis=1)
 if args.context_summaries:
     response_data['Errors'] = None

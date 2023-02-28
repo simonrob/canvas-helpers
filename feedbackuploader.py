@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-21'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-02-28'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -34,19 +34,21 @@ parser.add_argument('--attachment-extension', default='pdf',
 parser.add_argument('--attachment-mime-type', default=None,
                     help='Canvas requires a hint about the MIME type of the attachment file you are uploading. The '
                          'script is able to guess the correct value in most cases, but if you are uploading a file '
-                         'with an unusual extension or format then you can specify a value here.')
+                         'with an unusual extension or format then you can specify a value here')
 parser.add_argument('--marks-file', default=None,
                     help='An XLSX or CSV file containing a minimum of two columns: student number and mark (in that '
                          'order). A third column can be added for per-student feedback that will be added as a text '
                          'comment, overriding the global `--attachment-comment`. To add a comment but not a mark, set '
-                         'a negative mark (e.g., -1). Please note that the mark must be on the same scale as that set '
-                         'in the coursework itself (i.e., the \'Display grade as percentage\' assignment setup option '
-                         'that allows entering a percentage regardless of how many marks are available does not apply '
-                         'here). The script tries to validate this, but is not always able to do so if marks are low.')
+                         'a negative mark (e.g., -1). Please note that unless `--marks-as-percentage` is set, the mark '
+                         'must be on the same scale as that of the assignment itself. The script tries to validate '
+                         'this, but is not always able to do so if marks are low')
+parser.add_argument('--marks-as-percentage', action='store_true',
+                    help='Set this parameter if your `--marks-file` marks are provided as a percentage, rather than on '
+                         'the same scale as the marks available for the assignment itself')
 parser.add_argument('--attachment-comment', default='See attached file',
                     help='The comment to add when attaching the feedback file. Overridden by any individual comments '
                          'in the imported marks file. The default value (\'See attached file\') will be skipped if '
-                         'there is no attachment, but in all other cases the comment will be added regardless.')
+                         'there is no attachment, but in all other cases the comment will be added regardless')
 parser.add_argument('--groups', action='store_true',
                     help='Use this option if the assignment is completed in groups and all members should receive the '
                          'same mark and feedback. If you use this option, group names must be used instead of student '
@@ -67,7 +69,7 @@ ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 assignment_id = Utils.get_assignment_id(ASSIGNMENT_URL)
 INPUT_DIRECTORY = os.path.join(
     os.path.dirname(os.path.realpath(__file__)) if args.working_directory is None else args.working_directory,
-    assignment_id)
+    str(assignment_id))
 if not os.path.exists(INPUT_DIRECTORY):
     print('ERROR: input directory not found - please place all files to upload (and any `--marks-file`) in the '
           'folder %s' % INPUT_DIRECTORY)
@@ -101,7 +103,7 @@ assignment_details_json = json.loads(assignment_details_response.text)
 maximum_marks = assignment_details_json['points_possible']
 mark_exceeded = False
 for mark_row in marks_map:
-    if marks_map[mark_row]['mark'] > maximum_marks:
+    if marks_map[mark_row]['mark'] > maximum_marks and not args.marks_as_percentage:
         print('ERROR: marks file entry for', mark_row, 'awards more than the maximum', maximum_marks, 'marks available',
               '-', marks_map[mark_row])
         mark_exceeded = True
@@ -146,14 +148,18 @@ for submission in filtered_submission_list:
     attachment_comment = args.attachment_comment
     attachment_mark = None
     if attachment_name in marks_map:
+        marks_map[attachment_name]['matched'] = True
         attachment_mark = marks_map[attachment_name]['mark']
         if attachment_mark < 0:
             attachment_mark = None
+            print('Spreadsheet mark is < 0; skipping posting a mark for this submission')
         if 'comment' in marks_map[attachment_name]:
             attachment_comment = marks_map[attachment_name]['comment']
     elif attachment_file is None:
         print('Could not find attachment, mark or comment for submission (at least one item is required); skipping')
         continue
+    else:
+        print('No entry found in mark/comment spreadsheet for', attachment_name)
 
     # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.update
     comment_association_data = {'comment[text_comment]': attachment_comment}
@@ -169,8 +175,10 @@ for submission in filtered_submission_list:
             print('Using attachment comment provided as script argument:', attachment_comment)
 
     if attachment_mark is not None:
-        print('Adding submission mark from spreadsheet:', attachment_mark)
         comment_association_data['submission[posted_grade]'] = attachment_mark
+        if args.marks_as_percentage:
+            comment_association_data['submission[posted_grade]'] = '%s%%' % attachment_mark
+        print('Adding submission mark from spreadsheet:', comment_association_data['submission[posted_grade]'])
 
     if args.dry_run:
         print('DRY RUN: skipping attachment upload and comment posting steps; moving to next submission')
@@ -208,3 +216,7 @@ for submission in filtered_submission_list:
         continue
 
     print('\tFeedback created and associated successfully at', user_submission_url)
+
+for key, entry in marks_map.items():
+    if 'matched' not in entry:
+        print('WARNING: marks file entry for', key, 'not matched to submission:', entry)

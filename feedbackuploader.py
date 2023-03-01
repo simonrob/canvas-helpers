@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -103,8 +103,7 @@ assignment_details_response = requests.get(ASSIGNMENT_URL, headers=Utils.canvas_
 if assignment_details_response.status_code != 200:
     print('ERROR: unable to get assignment details - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
     exit()
-assignment_details_json = json.loads(assignment_details_response.text)
-maximum_marks = assignment_details_json['points_possible']
+maximum_marks = assignment_details_response.json()['points_possible']
 mark_exceeded = False
 for mark_row in marks_map:
     if marks_map[mark_row]['mark'] > maximum_marks and not args.marks_as_percentage:
@@ -201,7 +200,7 @@ for submission in filtered_submission_list:
             print('\tERROR: unable to retrieve attachment upload URL; skipping submission')
             continue
 
-        file_submission_url_json = json.loads(file_submission_url_response.text)
+        file_submission_url_json = file_submission_url_response.json()
         print('\tUploading feedback attachment to', file_submission_url_json['upload_url'].split('?')[0], '[truncated]')
 
         files_data = {'file': (attachment_file, open(attachment_path, 'rb'))}
@@ -213,7 +212,7 @@ for submission in filtered_submission_list:
             print('\tERROR: unable to upload attachment file; skipping submission')
             continue
 
-        file_submission_upload_json = json.loads(file_submission_upload_response.text)
+        file_submission_upload_json = file_submission_upload_response.json()
         print('\tAssociating uploaded file', file_submission_upload_json['id'], 'with new attachment comment')
         comment_association_data['comment[file_ids][]'] = file_submission_upload_json['id']
 

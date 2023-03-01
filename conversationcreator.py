@@ -4,7 +4,7 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-27'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -70,7 +70,7 @@ if args.delete_conversation_attachments:
     if attachments_response.status_code != 200:
         print('ERROR: unable to find your `%s` folder; aborting' % folder_name)
         exit()
-    attachments_folder = json.loads(attachments_response.text)[-1]  # resolve provides the requested folder last
+    attachments_folder = attachments_response.json()[-1]  # resolve provides the requested folder last
     if attachments_folder['name'] != folder_name:
         print('ERROR: unable to match your `%s` folder; aborting' % folder_name)
         exit()
@@ -137,17 +137,19 @@ if not course_user_response:
     exit()
 course_user_json = json.loads(course_user_response)
 
-self_id_response = requests.get('%s/users/self/' % API_ROOT, headers=Utils.canvas_api_headers())
-if self_id_response.status_code != 200:
+user_details_response = requests.get('%s/users/self/' % API_ROOT, headers=Utils.canvas_api_headers())
+if user_details_response.status_code != 200:
     print('ERROR: unable to retrieve your Canvas ID; aborting')
-SELF_ID = (json.loads(self_id_response.text))['id']
+    exit()
+user_details_json = user_details_response.json()
+SELF_ID = user_details_json['id']
 # conversation attachments cannot be in sub-folders(!), but Canvas automatically handles duplicates (by renaming)
 # FILES_SUBFOLDER_PATH = 'conversation attachments/%s/%d/%d' % (
 #     os.path.splitext(os.path.basename(__file__))[0], COURSE_ID, int(time.time()))
 FILES_SUBFOLDER_PATH = 'conversation attachments'
-print('Generating', len(course_user_json), 'conversations and uploading attachments to your account\'s folder:',
-      '%s/files/folder/users_%d/%s' % (args.url[0].split('/courses')[0], SELF_ID,
-                                       FILES_SUBFOLDER_PATH.replace(' ', '%20')))  # just for display formatting
+print('Generating', len(course_user_json), 'conversations and uploading attachments to', user_details_json['name'],
+      '\'s folder: %s/files/folder/users_%d/%s' % (args.url[0].split('/courses')[0], SELF_ID,
+                                                   FILES_SUBFOLDER_PATH.replace(' ', '%20')))  # display formatting only
 
 for user in course_user_json:
     print('\nProcessing message to', user)
@@ -210,7 +212,7 @@ for user in course_user_json:
             print('\tERROR: unable to retrieve attachment upload URL; skipping submission')
             continue
 
-        file_submission_url_json = json.loads(file_submission_url_response.text)
+        file_submission_url_json = file_submission_url_response.json()
         print('\tUploading attachment to', file_submission_url_json['upload_url'].split('?')[0], '[truncated]')
 
         files_data = {'file': (attachment_file, open(attachment_path, 'rb'))}
@@ -222,7 +224,7 @@ for user in course_user_json:
             print('\tERROR: unable to upload attachment file; skipping recipient')
             continue
 
-        file_submission_upload_json = json.loads(file_submission_upload_response.text)
+        file_submission_upload_json = file_submission_upload_response.json()
         print('\tAssociating uploaded file', file_submission_upload_json['id'], 'with conversation')
         conversation_data['attachment_ids[]'] = file_submission_upload_json['id']
 
@@ -235,7 +237,7 @@ for user in course_user_json:
     print('\tMessage successfully sent to user', canvas_id, '(%s)' % student_number)
 
     if args.delete_after_sending:
-        sent_message = json.loads(message_creation_response.text)
+        sent_message = message_creation_response.json()
         message_deletion_response = requests.delete('%s/conversations/%d' % (API_ROOT, sent_message[0]['id']),
                                                     headers=Utils.canvas_api_headers())
         if message_deletion_response.status_code == 200:

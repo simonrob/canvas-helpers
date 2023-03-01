@@ -19,7 +19,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -82,14 +82,6 @@ parser.add_argument('--working-directory', default=None,
                          'as this script')
 args = parser.parse_args()  # exits if no group URL is provided
 
-
-def group_name_to_int(name):
-    """We use an integer group number in the response forms (and reporting) for readability. This function converts
-    group name strings to integers via a simple naming scheme assumption (which works fine for groups that are created
-    using Canvas's group setup tool). Adjust this function to match your own naming scheme if needed."""
-    return int(name.split(' ')[-1])
-
-
 GROUP_ID = args.group[0].split('#tab-')[-1]
 try:
     GROUP_ID = int(GROUP_ID)
@@ -144,7 +136,7 @@ with open(cache_file_name) as group_cache_file:
         }
 
         if group_entry['group_name']:  # course members not in a group have an empty group name
-            group_id = group_name_to_int(group_entry['group_name'])
+            group_id = int(group_entry['group_name'].split(' ')[-1])
             if group_id not in group_sets:
                 group_sets[group_id] = []
             group_sets[group_id].append(group_entry)
@@ -362,7 +354,7 @@ for group in group_sets.keys():
         empty_row = pandas.DataFrame([[None] * len(response_data.columns)], columns=list(response_data), index=members)
         response_data = pandas.concat([response_data, empty_row])
 
-if len(original_marks[[s != str(group_name_to_int(s)) for s in original_marks.index]]):  # detect group or individual
+if all([not mark_key.isdigit() for mark_key in original_marks.index]):  # detect groups (student numbers are digits)
     original_marks.index = original_marks.index.to_series().str.replace(r'.+?(\d+)', lambda m: m.group(1),
                                                                         regex=True).astype(int)
     original_marks.index.names = ['Group']

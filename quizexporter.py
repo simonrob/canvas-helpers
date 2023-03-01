@@ -8,7 +8,7 @@ limitation, exporting all responses to a single spreadsheet."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-21'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -93,7 +93,7 @@ for user_session_id in user_session_ids:
         exit()
 
     # first we get a per-submission access token
-    attempt_json = json.loads(token_response.text)
+    attempt_json = token_response.json()
     quiz_session_headers = requests.structures.CaseInsensitiveDict()
     quiz_session_headers['accept'] = 'application/json'
     quiz_session_headers['authorization'] = attempt_json['token']
@@ -107,7 +107,7 @@ for user_session_id in user_session_ids:
         print('ERROR: unable to load quiz metadata - aborting')
         exit()
 
-    submission_summary_json = json.loads(submission_response.text)
+    submission_summary_json = submission_response.json()
     results_id = submission_summary_json['authoritative_result']['id']
     student_name = submission_summary_json['metadata']['user_full_name']
     student_details = [s for s in student_number_map if s['user_id'] == user_session_id['user_id']]
@@ -118,13 +118,13 @@ for user_session_id in user_session_ids:
     # then the actual quiz questions
     quiz_questions_response = requests.get('%s/quiz_sessions/%d/session_items' % (QUIZ_API_ROOT, quiz_session_id),
                                            headers=quiz_session_headers)
-    quiz_questions_json = json.loads(quiz_questions_response.text)
+    quiz_questions_json = quiz_questions_response.json()
 
     # and finally the responses that were submitted
     quiz_answers_response = requests.get(
         '%s/quiz_sessions/%d/results/%s/session_item_results' % (QUIZ_API_ROOT, quiz_session_id, results_id),
         headers=quiz_session_headers)
-    quiz_answers_json = json.loads(quiz_answers_response.text)
+    quiz_answers_json = quiz_answers_response.json()
 
     current_column = 3  # in our spreadsheet, column 1 is always the student's number; column 2 is always their name
     for question in quiz_questions_json:

@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import json
@@ -199,8 +199,7 @@ class Utils:
                             print('ERROR: unable to load user profile for', user['id'], '- resorting to email')
                             student_number = user['email'].split('@')[0]
                         else:
-                            user_profile_json = json.loads(user_profile_response.text)
-                            student_number = user_profile_json['login_id']
+                            student_number = user_profile_response.json()['login_id']
                     submission_student_map.append({'student_number': student_number, 'user_id': user['id']})
         return submission_student_map
 

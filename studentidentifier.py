@@ -7,7 +7,7 @@ any existing data lost*) if it is present."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-27'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -35,7 +35,7 @@ print('%screating Student Number column for course %s' % ('DRY RUN: ' if args.dr
 existing_private_column_id = -1
 custom_column_response = requests.get('%s/custom_gradebook_columns' % COURSE_URL, headers=Utils.canvas_api_headers())
 if custom_column_response.status_code == 200:
-    existing_custom_columns = json.loads(custom_column_response.text)
+    existing_custom_columns = custom_column_response.json()
     for column in existing_custom_columns:
         if column['teacher_notes']:
             existing_private_column_id = column['id']
@@ -65,7 +65,7 @@ else:
         print('\tERROR: unable to create/update custom column; aborting')
         exit()
 
-    custom_column_id = json.loads(custom_column_request_response.text)['id']
+    custom_column_id = custom_column_request_response.json()['id']
     print('Successfully %s custom column %d; now adding user data' % (
         'updated' if existing_private_column_id >= 0 else 'created', custom_column_id))
 

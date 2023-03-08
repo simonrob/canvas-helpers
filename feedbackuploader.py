@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-08'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -60,11 +60,11 @@ parser.add_argument('--groups-individual', action='store_true',
                          'members marks and feedback individually, but all members should receive the same mark and '
                          'feedback. The same marks file and attachment naming requirements as `--groups` mode apply.')
 parser.add_argument('--include-unsubmitted', action='store_true',
-                    help='Students who have not submitted an attachment for the assignment are skipped by default. Set '
-                         'this option if you want to add marks and/or feedback for these students as well. Note that '
-                         'that when not in `--groups` mode this will include any test students and/or staff enrolled '
-                         'as students, but this should not be an issue as you will not have provided a mark, comment '
-                         'or attachment for them')
+                    help='Students who have not made a submission for the assignment are skipped by default. Set this '
+                         'option if you want to include these students (for example, when no submission is actually '
+                         'expected, and the Canvas assignment is used solely to record marks). Note that when not in '
+                         '`--groups` mode this will include any test students and/or staff enrolled as students, but '
+                         'this should not be an issue as no mark, comment or attachment will be available for them')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
 args = parser.parse_args()  # exits if no assignment URL is provided
@@ -214,7 +214,7 @@ for submission in filtered_submission_list:
 
         file_submission_upload_json = file_submission_upload_response.json()
         print('\tAssociating uploaded file', file_submission_upload_json['id'], 'with new attachment comment')
-        comment_association_data['comment[file_ids][]'] = file_submission_upload_json['id']
+        comment_association_data['comment[file_ids][]'] = [file_submission_upload_json['id']]
 
     comment_association_response = requests.put(user_submission_url, data=comment_association_data,
                                                 headers=Utils.canvas_api_headers())

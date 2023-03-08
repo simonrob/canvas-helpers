@@ -4,7 +4,7 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-08'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -137,19 +137,17 @@ if not course_user_response:
     exit()
 course_user_json = json.loads(course_user_response)
 
-user_details_response = requests.get('%s/users/self/' % API_ROOT, headers=Utils.canvas_api_headers())
-if user_details_response.status_code != 200:
+SELF_ID, user_name = Utils.get_user_details(API_ROOT, user_id='self')
+if not SELF_ID:
     print('ERROR: unable to retrieve your Canvas ID; aborting')
     exit()
-user_details_json = user_details_response.json()
-SELF_ID = user_details_json['id']
 # conversation attachments cannot be in sub-folders(!), but Canvas automatically handles duplicates (by renaming)
 # FILES_SUBFOLDER_PATH = 'conversation attachments/%s/%d/%d' % (
 #     os.path.splitext(os.path.basename(__file__))[0], COURSE_ID, int(time.time()))
 FILES_SUBFOLDER_PATH = 'conversation attachments'
-print('Generating', len(course_user_json), 'conversations and uploading attachments to', user_details_json['name'],
-      '\'s folder: %s/files/folder/users_%d/%s' % (args.url[0].split('/courses')[0], SELF_ID,
-                                                   FILES_SUBFOLDER_PATH.replace(' ', '%20')))  # display formatting only
+print('Generating', len(course_user_json), 'conversations and uploading attachments to', user_name, '\'s folder:',
+      '%s/files/folder/users_%d/%s' % (args.url[0].split('/courses')[0], SELF_ID,
+                                       FILES_SUBFOLDER_PATH.replace(' ', '%20')))  # display formatting only
 
 for user in course_user_json:
     print('\nProcessing message to', user)
@@ -181,7 +179,7 @@ for user in course_user_json:
 
     # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.update
     conversation_data = {
-        'recipients[]': canvas_id,
+        'recipients[]': [canvas_id],
         'subject': args.conversation_subject,
         'body': conversation_message.replace('\\n', '\n'),
         'force_new': True,
@@ -226,7 +224,7 @@ for user in course_user_json:
 
         file_submission_upload_json = file_submission_upload_response.json()
         print('\tAssociating uploaded file', file_submission_upload_json['id'], 'with conversation')
-        conversation_data['attachment_ids[]'] = file_submission_upload_json['id']
+        conversation_data['attachment_ids[]'] = [file_submission_upload_json['id']]
 
     message_creation_response = requests.post('%s/conversations' % API_ROOT, data=conversation_data,
                                               headers=Utils.canvas_api_headers())

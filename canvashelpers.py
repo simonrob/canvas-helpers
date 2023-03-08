@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-08'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import json
@@ -46,6 +46,14 @@ class Utils:
     @staticmethod
     def get_assignment_id(assignment_url):
         return int(assignment_url.rstrip('/').split('/')[-1])
+
+    @staticmethod
+    def get_user_details(api_root, user_id='self'):
+        user_details_response = requests.get('%s/users/%s/' % (api_root, user_id), headers=Utils.canvas_api_headers())
+        if user_details_response.status_code != 200:
+            return user_id, 'UNKNOWN NAME'
+        user_details_json = user_details_response.json()
+        return user_details_json['id'], user_details_json['name']
 
     @staticmethod
     def ordered_strings(text):

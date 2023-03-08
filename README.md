@@ -26,14 +26,21 @@ Downloaded submissions are saved in a folder named as the assignment ID.
 Usage: `python3 submissiondownloader.py [assignment URL]`.
 See `python3 submissiondownloader.py --help` for further options.
 
-- [WebPA manager](webpamanager.py): [WebPA](https://webpaproject.lboro.ac.uk/) is a useful way of incorporating team member contribution feedback when running group-based assignments.
-This script helps run an offline version of this process using spreadsheets uploaded to a Canvas assignment, and handles both form generation and mark scaling.
-See `python3 webpamanager.py --help` for further instructions.
-
 - [Conversation creator](conversationcreator.py): This script allows you to send personalised or generic conversation messages to individual students on a course.
 Messages can also include a unique attachment file.
 Usage: Place your attachment files in the script's working directory, named according to students' Canvas Login IDs (typically their institutional student numbers), then run `python3 conversationcreator.py [course URL]`.
 See `python3 conversationcreator.py --help` for further options.
+
+- [WebPA manager](webpamanager.py): [WebPA](https://webpaproject.lboro.ac.uk/) is a useful way of incorporating team member contribution feedback when running group-based assignments.
+This script helps run an offline version of this process using spreadsheets uploaded to a Canvas assignment, and handles both form generation and mark scaling.
+See `python3 webpamanager.py --help` for further instructions.
+
+- [Moderation manager](moderationmanager.py): The intended use of the Canvas moderation tools is for one or more markers to initially grade submissions, and then a moderating marker to review these, either selecting one mark as the final grade or providing their own (often naturally an average of the existing marks).
+Like so many of the platform's features, this works relatively well with small classes, but is totally impractical at larger course sizes.
+In addition, even with smaller classes, moderation does not always work well when rubrics are used - any comments entered by markers whose score is not chosen as the final grade are simply discarded.
+This script automates the process of averaging marks from multiple markers; and, when rubrics are used, combines all markers' grades and feedback into a single final rubric that is released (anonymously or with marker names attached) to the student.
+Note that the underlying limitations of the Canvas moderation features still apply; in particular the rather arbitrary limit of 10 unique markers per _assignment_ (not per student).
+See `python3 moderationmanager.py --help` for further instructions.
 
 - [Quiz result exporter](quizexporter.py): When using quizzes as assignments that need review or processing of some form (rather than just predetermined correct/incorrect responses), the "New Quizzes" feature on Canvas is far worse than the old version, and—most importantly, for large class sizes—does not allow bulk response export.
 After significant community resistance, Canvas developers Instructure have now [relented](https://community.canvaslms.com/t5/Quizzes-Transition/Transparency-into-Quizzes-Planning/ta-p/502615) and may at some point implement this missing feature.

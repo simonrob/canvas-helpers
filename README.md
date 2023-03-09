@@ -4,6 +4,14 @@ A collection of Python scripts to help make common [Canvas](https://www.instruct
 Begin by adding your Canvas API key in [canvashelpers.config](https://github.com/simonrob/canvas-helpers/blob/main/canvashelpers.config), then read the guides below to get started.
 Each script also has a `--help` option that provides further detail.
 
+
+## Requirement
+* Required Python packages can be installed as follow:
+```
+pip3 install openpyxl
+pip3 install requests
+```
+
 ## Scripts and functions
 - [Attachment file/comment/mark uploader](feedbackuploader.py): When assignment marks are processed outside of Canvas, they can already be uploaded in bulk from a spreadsheet using the existing tools (import/export grades).
 But it is not possible to add comments or upload attachments in this way (except through an [awkward hack](https://ltech.ljmu.ac.uk/wp-content/uploads/2017/04/Batch-Uploading-Student-Submissions-and-Feedback.pdf)), which means a tiresomely repetitive task of attaching these documents one-by-one.
@@ -46,6 +54,7 @@ See `python3 moderationmanager.py --help` for further instructions.
 After significant community resistance, Canvas developers Instructure have now [relented](https://community.canvaslms.com/t5/Quizzes-Transition/Transparency-into-Quizzes-Planning/ta-p/502615) and may at some point implement this missing feature.
 In the meantime, this script allows you to export all quiz responses to an XLSX spreadsheet.
 Usage: `python3 quizexporter.py [assignment URL]`
+
 
 ## Additional resources
 - [Python module for working with the Canvas API](https://canvasapi.readthedocs.io/en/stable/index.html)

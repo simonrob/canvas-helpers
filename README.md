@@ -5,12 +5,17 @@ Begin by adding your Canvas API key in [canvashelpers.config](https://github.com
 Each script also has a `--help` option that provides further detail.
 
 
-## Requirement
-* Required Python packages can be installed as follow:
+## Requirements
+Most scripts have a common set of dependencies, which can be installed from the project's requirements file:
 ```
-pip3 install openpyxl
-pip3 install requests
+python -m pip install -r requirements.txt
 ```
+
+The [WebPA manager](webpamanager.py) has an extra requirement:
+```
+python -m pip install pandas
+```
+
 
 ## Scripts and functions
 - [Attachment file/comment/mark uploader](feedbackuploader.py): When assignment marks are processed outside of Canvas, they can already be uploaded in bulk from a spreadsheet using the existing tools (import/export grades).

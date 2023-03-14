@@ -4,7 +4,7 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-08'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-14'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -145,12 +145,15 @@ if not SELF_ID:
 # FILES_SUBFOLDER_PATH = 'conversation attachments/%s/%d/%d' % (
 #     os.path.splitext(os.path.basename(__file__))[0], COURSE_ID, int(time.time()))
 FILES_SUBFOLDER_PATH = 'conversation attachments'
-print('Generating', len(course_user_json), 'conversations and uploading attachments to', user_name, '\'s folder:',
+print('Generating', len(course_user_json), 'conversations and uploading attachments to %s\'s folder:' % user_name,
       '%s/files/folder/users_%d/%s' % (args.url[0].split('/courses')[0], SELF_ID,
                                        FILES_SUBFOLDER_PATH.replace(' ', '%20')))  # display formatting only
 
+user_count = 0
+user_total = len(course_user_json)
 for user in course_user_json:
-    print('\nProcessing message to', user)
+    user_count += 1
+    print('\nProcessing message', user_count, 'of', user_total, 'to', user['name'], '(%s)' % user['login_id'])
 
     canvas_id = user['id']
     student_number = user['login_id']
@@ -174,7 +177,7 @@ for user in course_user_json:
     if student_number in comments_map:
         conversation_message = comments_map[student_number]
     elif attachment_file is None:
-        print('Could not find attachment or message for conversation (at least one item is required); skipping')
+        print('WARNING: could not find attachment/message for conversation (at least one item is required); skipping')
         continue
 
     # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.update
@@ -241,4 +244,4 @@ for user in course_user_json:
         if message_deletion_response.status_code == 200:
             print('\tRemoved message from your Sent items folder')
         else:
-            print('\tUnable to remove message from your sent items folder:', message_deletion_response.text)
+            print('\tWARNING: unable to remove message from your sent items folder:', message_deletion_response.text)

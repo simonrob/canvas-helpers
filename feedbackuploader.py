@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-08'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-14'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -176,10 +176,10 @@ for submission in filtered_submission_list:
         print('Adding submission comment from spreadsheet:', attachment_comment.replace('\n', '\\n'))
     else:
         if attachment_file is None and attachment_comment == parser.get_default('attachment_comment'):
-            print('Skipping default comment \'', attachment_comment, '\' as no attachment is provided')
+            print('Skipping default comment \'%s\' as no attachment is provided' % attachment_comment)
             del comment_association_data['comment[text_comment]']
         else:
-            print('Using attachment comment provided as script argument:', attachment_comment.replace('\n', '\\n'))
+            print('Using attachment comment provided as script argument:', attachment_comment)
 
     if attachment_mark is not None:
         comment_association_data['submission[posted_grade]'] = attachment_mark

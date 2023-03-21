@@ -19,7 +19,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-21'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -75,11 +75,12 @@ parser.add_argument('--context-summaries', action='store_true',
                          'a ready-made summary of the submission that can be provided to each submitting student. Only '
                          'applies when not in `--setup` mode')
 parser.add_argument('--working-directory', default=None,
-                    help='The location to use for processing and output (which will be created if it does not exist). '
-                         'In normal mode this directory is assumed to contain all of the individual student responses '
-                         'to the WebPA exercise, named as [student number].xlsx (missing files will be treated as non-'
-                         'respondents). In `--setup` mode this directory should not exist. Default: the same directory '
-                         'as this script')
+                    help='The location to use for processing and output. The script will work in a subfolder of this '
+                         'directory that is named as the Canvas group set ID. When `--setup` is not specified, this '
+                         'subfolder is assumed to contain the individual student responses to the WebPA exercise, '
+                         'named as [student number].xlsx (missing files will be treated as non-respondents). In '
+                         '`--setup` mode the set subfolder will be created by the script, and should not already '
+                         'exist. Default: the same directory as this script')
 args = parser.parse_args()  # exits if no group URL is provided
 
 GROUP_ID = args.group[0].split('#tab-')[-1]
@@ -244,6 +245,7 @@ for file in response_files:
     current_responses = []
     current_errors = []
     current_total = 0
+    found_members = []
     for row in response_sheet.iter_rows(max_col=6):
         cells = [c.value for c in row]
         if cells == webpa_headers:
@@ -253,7 +255,10 @@ for file in response_files:
             continue  # sometimes openpyxl produces hundreds of empty rows at the end of a table - ignore
 
         if found_header_row:
-            cells[2] = str(cells[2])  # make sure student number is treated as a string
+            if not cells[2]:
+                continue  # sometimes xlsx files contain empty rows after content - ignore
+            cells[2] = str(cells[2]).split('.')[0]  # make sure student number is treated as a string
+            found_members.append(cells[2])  # so we can check that all expected members are present
 
             if not current_group:
                 current_group = cells[5]
@@ -288,8 +293,16 @@ for file in response_files:
                 current_responses.append([None, cells[2], bounded_score, None, current_group])
                 current_total += bounded_score
 
+    if current_group:
+        if sorted(found_members) != sorted([g['student_number'] for g in group_sets[current_group]]):
+            current_errors.append('Group member(s) missing')
+            invalid_file = True
+
     if not current_rater:
-        current_errors.append('Own name indicator missing')
+        if not found_header_row:
+            current_errors.append('Incorrect (or edited example) rating form has been used')
+        else:
+            current_errors.append('Own name indicator missing')
         invalid_file = True
     if current_errors:
         submission_errors[file.split('.')[0]] = current_errors

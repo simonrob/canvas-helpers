@@ -5,7 +5,7 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-02-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-21'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -121,12 +121,14 @@ for submission in filtered_submission_list:
                 else:
                     output_filename = os.path.join(submission_output_directory, '%s.%s' % (
                         submitter['group_name' if args.groups else 'student_number'],
-                        document['filename'].split('.')[-1]))
+                        document['filename'].split('.')[-1].lower()))
 
                 with open(output_filename, 'wb') as output_file:
                     output_file.write(file_download_response.content)
-                print('Saved %s as %s (%d of %d)' % (document['url'], output_filename.replace(OUTPUT_DIRECTORY, '')[1:],
-                                                     download_count, download_total))
+                late_status = ' (LATE: %d seconds)' % submission['seconds_late'] if submission['late'] else ''
+                print('Saved %s[truncated] as %s (%d of %d)%s' % (document['url'].split('download?')[0],
+                                                                  output_filename.replace(OUTPUT_DIRECTORY, '')[1:],
+                                                                  download_count, download_total, late_status))
 
             else:
                 print('ERROR: download failed for submission from', submitter, 'at', document['url'], '; aborting')

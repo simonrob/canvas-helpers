@@ -19,7 +19,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-21'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-29'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -265,6 +265,7 @@ for file in response_files:
                 valid_members = [g['student_number'] for g in group_sets[current_group]]
 
             # validate the submitted data against Canvas group membership
+            ignored_rating = False
             if cells[0]:  # note that we accept any content, not just the '✔' we ask for
                 if not current_rater and cells[2] == expected_rater:
                     current_rater = cells[2]
@@ -273,8 +274,7 @@ for file in response_files:
                         [e for e in ['Incorrect or multiple respondents selected'] if e not in current_errors])
                     invalid_file = True
             if cells[2] not in valid_members:
-                current_errors.append('Invalid group member student number (%s)' % cells[2])
-                invalid_file = True
+                ignored_rating = True  # not necessarily invalid - see membership checks below
             if cells[5] != current_group:
                 current_errors.append('Invalid group number (%s)' % cells[5])
                 invalid_file = True
@@ -284,7 +284,7 @@ for file in response_files:
                                       'invalid (\'%s\')' % cells[3] if cells[3] else 'missing'))
                 invalid_file = True
 
-            if not invalid_file:
+            if not (invalid_file or ignored_rating):
                 bounded_score = round(max(min(cells[3], 5), 1))  # don't allow WebPA scores outside the 1-5 (int) range
                 if bounded_score != cells[3]:
                     current_errors.append('Rating %s for %s is outside of range 1-5 (rounded to %d)' % (
@@ -294,9 +294,16 @@ for file in response_files:
                 current_total += bounded_score
 
     if current_group:
-        if sorted(found_members) != sorted([g['student_number'] for g in group_sets[current_group]]):
-            current_errors.append('Group member(s) missing')
-            invalid_file = True
+        sorted_found = sorted(found_members)
+        sorted_expected = sorted([g['student_number'] for g in group_sets[current_group]])
+        if sorted_found != sorted_expected:
+            members_missing = set(sorted_expected) - set(sorted_found)
+            if members_missing:
+                current_errors.append('Group member(s) missing: %s' % ', '.join(members_missing))
+                invalid_file = True
+            members_added = set(sorted_found) - set(sorted_expected)
+            if members_added:  # note: this can have legitimate explanations - e.g., group members withdrawing
+                current_errors.append('Non-group member(s) found: %s – ignoring' % ', '.join(members_added))
 
     if not current_rater:
         if not found_header_row:

@@ -19,7 +19,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-29'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-30'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -196,7 +196,7 @@ if args.setup:
 
 # processing mode - first load the marks to use as the baseline
 marks_map = {}
-if args.marks_file is not None:
+if args.marks_file:
     marks_file = os.path.join(WORKING_DIRECTORY, args.marks_file)
     if os.path.exists(marks_file):
         if marks_file.lower().endswith('.xlsx'):
@@ -422,12 +422,16 @@ if args.context_summaries:
                 break
         for file in response_files:
             if row[0].value == file.split('.')[0]:
-                row[12].value = 'You submitted a valid contribution form.'
+                if row[11].value:
+                    row[12].value = 'You submitted a valid contribution form that required correction for the ' \
+                                    'following reason(s): %s.' % row[11].value
+                else:
+                    row[12].value = 'You submitted a valid contribution form.'
                 break
         if not row[12].value:
             if row[11].value:
-                row[12].value = 'You submitted a contribution form, but it was invalid for the following reason(s): '
-                row[12].value += row[11].value + '.'
+                row[12].value = 'You submitted a contribution form, but it was invalid for the following reason(s): ' \
+                                '%s.' % row[11].value
             else:
                 row[12].value = 'You did not submit a contribution form.'
 

@@ -4,7 +4,7 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-14'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-30'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -112,7 +112,7 @@ print('%screating conversations for course %s' % ('DRY RUN: ' if args.dry_run el
 
 # load and parse comments
 comments_map = {}
-if args.comments_file is not None:
+if args.comments_file:
     comments_file = os.path.join(INPUT_DIRECTORY, args.comments_file)
     if os.path.exists(comments_file):
         if comments_file.lower().endswith('.xlsx'):
@@ -160,16 +160,15 @@ for user in course_user_json:
 
     attachment_file = '%s.%s' % (student_number, args.attachment_extension)
     attachment_path = os.path.join(INPUT_DIRECTORY, attachment_file)
-    attachment_mime_type = args.attachment_mime_type if args.attachment_mime_type is not None else \
-        mimetypes.guess_type(attachment_path)[0]
-
+    attachment_mime_type = args.attachment_mime_type or mimetypes.guess_type(attachment_path)[0]
     attachment_exists = os.path.exists(attachment_path)
-    if attachment_exists and attachment_mime_type is not None:
+
+    if attachment_exists and attachment_mime_type:
         print('Found conversation attachment file', attachment_file, 'with MIME type', attachment_mime_type)
     else:
-        print('Attachment %s at %s %s; skipping upload for this conversation' % (
-            attachment_file, attachment_path, ('not found' if not attachment_exists else
-                                               'is not a recognised MIME type - see `--attachment-mime-type` option')))
+        print('Attachment %s at %s' % (attachment_file, os.path.dirname(attachment_path)),
+              'not found;' if not attachment_exists else 'is not of a recognised MIME type;',
+              'skipping upload for this submission')
         attachment_file = None
 
     # filter out unset fields, allowing any combination of mark/comment/attachment)
@@ -197,7 +196,7 @@ for user in course_user_json:
         print('DRY RUN: skipping attachment upload and message posting/deletion steps; moving to next recipient')
         continue
 
-    if attachment_file is not None:
+    if attachment_file:
         # if there is an attachment we first need to request an upload URL, then associate with a submission comment
         submission_form_data = {
             'name': attachment_file,

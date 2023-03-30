@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-08'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-30'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import json
@@ -224,5 +224,5 @@ class Utils:
         if len(row) > 2 and row[2]:  # individual comment is optional
             marks_map_entry['comment'] = row[2]
 
-        if student_number_or_group_name is not None:
+        if student_number_or_group_name:
             marks_map[student_number_or_group_name] = marks_map_entry

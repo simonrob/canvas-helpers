@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-14'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-30'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -56,9 +56,13 @@ parser.add_argument('--groups', action='store_true',
                          'exactly as specified on Canvas. For example, if you have a Canvas group called \'Group 1\', '
                          'name the attachment file \'Group 1.pdf\'; (\'1.pdf\' will not work)')
 parser.add_argument('--groups-individual', action='store_true',
-                    help='Use this option if the assignment is completed in groups, and it is configured to give group '
-                         'members marks and feedback individually, but all members should receive the same mark and '
-                         'feedback. The same marks file and attachment naming requirements as `--groups` mode apply.')
+                    help='Use this option *in addition* to `--groups` if the assignment is completed in groups but it '
+                         'is configured to give group members marks and feedback individually. The script will first '
+                         'look for attachments or `--marks-file` entries named after the group (for cases where all '
+                         'members should receive the same feedback). If these items are not found, the script will '
+                         'then look for attachments or `--marks-file` entries named after student numbers (for cases '
+                         'when individual feedback is needed). These approaches can be mixed if needed (e.g., a '
+                         'group-named attachment but individual marks and/or feedback comments).')
 parser.add_argument('--include-unsubmitted', action='store_true',
                     help='Students who have not made a submission for the assignment are skipped by default. Set this '
                          'option if you want to include these students (for example, when no submission is actually '
@@ -82,7 +86,7 @@ print('%sUploading assignment feedback from %s to assignment %s' % (
     'DRY RUN: ' if args.dry_run else '', INPUT_DIRECTORY, args.url[0]))
 
 marks_map = {}
-if args.marks_file is not None:
+if args.marks_file:
     marks_file = os.path.join(INPUT_DIRECTORY, args.marks_file)
     if os.path.exists(marks_file):
         if marks_file.lower().endswith('.xlsx'):
@@ -128,7 +132,7 @@ submission_count = 0
 submission_total = len(filtered_submission_list)
 for submission in filtered_submission_list:
     submission_count += 1
-    submitter = Utils.get_submitter_details(submission, groups_mode=args.groups or args.groups_individual)
+    submitter = Utils.get_submitter_details(submission, groups_mode=args.groups)
     if not submitter:
         print('WARNING: submitter details not found for submission; skipping:', submission)
         continue
@@ -136,37 +140,53 @@ for submission in filtered_submission_list:
     print('\nProcessing submission', submission_count, 'of', submission_total, 'from', submitter)
     user_submission_url = '%s/submissions/%d' % (ASSIGNMENT_URL, submitter['canvas_user_id'])
 
-    attachment_name = submitter['group_name'] if args.groups or args.groups_individual else submitter['student_number']
-    attachment_file = '%s.%s' % (attachment_name, args.attachment_extension)
+    feedback_identifier = submitter['group_name'] if args.groups else submitter['student_number']
+    attachment_file = '%s.%s' % (feedback_identifier, args.attachment_extension)
     attachment_path = os.path.join(INPUT_DIRECTORY, attachment_file)
-    attachment_mime_type = args.attachment_mime_type if args.attachment_mime_type is not None else \
-        mimetypes.guess_type(attachment_path)[0]
-
+    attachment_mime_type = args.attachment_mime_type or mimetypes.guess_type(attachment_path)[0]
     attachment_exists = os.path.exists(attachment_path)
-    if attachment_exists and attachment_mime_type is not None:
+
+    if attachment_exists and attachment_mime_type:
         print('Found submission attachment file', attachment_file, 'with MIME type', attachment_mime_type)
+    elif args.groups and args.groups_individual:  # groups mode but with potential for individual feedback attachment
+        attachment_file = '%s.%s' % (submitter['student_number'], args.attachment_extension)
+        attachment_path = os.path.join(INPUT_DIRECTORY, attachment_file)
+        attachment_mime_type = args.attachment_mime_type or mimetypes.guess_type(attachment_path)[0]
+        attachment_exists = os.path.exists(attachment_path)
+
+        if attachment_exists and attachment_mime_type:
+            print('Found individual group member submission attachment file', attachment_file, 'with MIME type',
+                  attachment_mime_type)
+        else:
+            print('Both group (%s.%s)' % (submitter['group_name'], args.attachment_extension),
+                  'and individual (%s)' % attachment_file, 'attachment at %s' % os.path.dirname(attachment_path),
+                  'were not found or are not of a recognised MIME type; skipping upload for this submission')
+            attachment_file = None
     else:
-        print('Attachment %s at %s %s; skipping upload for this submission' % (
-            attachment_file, attachment_path, ('not found' if not attachment_exists else
-                                               'is not a recognised MIME type - see `--attachment-mime-type` option')))
+        print('Attachment %s at %s' % (attachment_file, os.path.dirname(attachment_path)),
+              'not found;' if not attachment_exists else 'is not of a recognised MIME type;',
+              'skipping upload for this submission')
         attachment_file = None
 
     # filter out unset fields, allowing any combination of mark/comment/attachment)
     attachment_comment = args.attachment_comment
     attachment_mark = None
-    if attachment_name in marks_map:
-        marks_map[attachment_name]['matched'] = True
-        attachment_mark = marks_map[attachment_name]['mark']
+    if feedback_identifier not in marks_map and args.groups and args.groups_individual:
+        # groups mode but with potential for individual feedback if no group feedback was found
+        feedback_identifier = submitter['student_number']
+    if feedback_identifier in marks_map:
+        marks_map[feedback_identifier]['matched'] = True
+        attachment_mark = marks_map[feedback_identifier]['mark']
         if attachment_mark < 0:
             attachment_mark = None
             print('Spreadsheet mark is < 0; skipping posting a mark for this submission')
-        if 'comment' in marks_map[attachment_name]:
-            attachment_comment = marks_map[attachment_name]['comment']
+        if 'comment' in marks_map[feedback_identifier]:
+            attachment_comment = marks_map[feedback_identifier]['comment']
     elif attachment_file is None:
         print('Could not find attachment, mark or comment for submission (at least one item is required); skipping')
         continue
     else:
-        print('No entry found in mark/comment spreadsheet for', attachment_name)
+        print('No entry found in mark/comment spreadsheet for', feedback_identifier)
 
     # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.update
     comment_association_data = {'comment[text_comment]': attachment_comment.replace('\\n', '\n')}
@@ -191,7 +211,7 @@ for submission in filtered_submission_list:
         print('DRY RUN: skipping attachment upload and comment posting steps; moving to next submission')
         continue
 
-    if attachment_file is not None:
+    if attachment_file:
         # if there is an attachment we first need to request an upload URL, then associate with a submission comment
         submission_form_data = {'name': attachment_file, 'content_type': attachment_mime_type}
         file_submission_url_response = requests.post('%s/comments/files' % user_submission_url,

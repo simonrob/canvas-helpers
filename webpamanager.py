@@ -19,7 +19,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-30'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-31'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -211,8 +211,8 @@ if args.marks_file:
                     Utils.parse_marks_file_row(marks_map, row)
         print('Loaded original marks mapping for', len(marks_map), 'submissions:', marks_map)
     else:
-        print('ERROR: unable to load marks mapping from', args.marks_file, '- not found in assignment directory at',
-              marks_file, '; aborting')
+        print('ERROR: marks mapping file', args.marks_file, 'not found in assignment directory at', marks_file,
+              '- aborting')
         exit()
 
 # next, load responses and create a master spreadsheet containing all rater responses

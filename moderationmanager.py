@@ -24,10 +24,11 @@ Related tools:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-08'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-31'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
+import os
 
 import openpyxl.utils
 import openpyxl.worksheet.dimensions
@@ -46,7 +47,7 @@ parser.add_argument('--include-unsubmitted', action='store_true',
                          'option if you want to include these students (for example, when no submission is actually '
                          'expected, and the Canvas assignment is used solely to record marks). Please note that this '
                          'will include any test students and/or staff enrolled as students')
-parser.add_argument('--minimum-markers', type=int, default=2,
+parser.add_argument('--minimum-markers', type=int, default=2,  # TODO: get this from the assignment?
                     help='It can be helpful to run this script to review grading outcomes before all marking has been '
                          'completed. Use this parameter to set a minimum threshold for the number of individual marks '
                          'received for each submission (i.e., number of markers) in order to calculate a final grade. '
@@ -179,7 +180,7 @@ for submission in filtered_submission_list:
 
     print('\nProcessing submission from', submitter)
     if 'provisional_grades' not in submission:
-        print('\tWARNING: no provisional grades found for submission from', submitter, '; skipping')
+        print('\tWARNING: no provisional grades found for submission; skipping:', submitter['student_number'])
         skipped_submission = True
         continue
 
@@ -200,8 +201,8 @@ for submission in filtered_submission_list:
     for scorer_grade in submission['provisional_grades']:
         if scorer_grade['final']:
             final_grade_id = scorer_grade['provisional_grade_id']
-            print('\tSkipping provisional grade marked as final - will be replaced by the new calculated score/rubric',
-                  scorer_grade)
+            print('\tSkipping provisional grade marked as final (will be replaced by the new calculated score/rubric)',
+                  '- existing details:', scorer_grade)
             # alternatively: delete the rubric assessment, but this doesn't remove the provisional grade, so ineffective
             # rubric_removal_response = requests.delete('%s/rubric_associations/%d/rubric_assessments/%d' % (
             #     API_ROOT, rubric_association['id'], marker_grade['rubric_assessments'][0]['id']),
@@ -233,14 +234,14 @@ for submission in filtered_submission_list:
                 print('\t\tWARNING: skipping rubric assessment from', user_map[scorer_id], 'with no score entered')
                 continue
 
+            row = spreadsheet.max_row
             for criterion in rubric_assessment['data']:
                 criterion_id = criterion['criterion_id']
 
                 # add rubric details to our backup spreadsheet
-                row = spreadsheet.max_row
                 position = rubric_spreadsheet_map[criterion_id]
-                spreadsheet['%s%d' % (openpyxl.utils.get_column_letter(position), row)] = criterion['comments']
                 spreadsheet['%s%d' % (openpyxl.utils.get_column_letter(position - 1), row)] = criterion['points']
+                spreadsheet['%s%d' % (openpyxl.utils.get_column_letter(position), row)] = criterion['comments']
 
                 # then build them into the final rubric (even if we have overridden in the final calculation)
                 rubric_points[criterion_id].append(criterion['points'])
@@ -265,7 +266,8 @@ for submission in filtered_submission_list:
                 for rubric_criterion in rubric:  # include only the moderator's points (but everyone's comments)
                     criterion_id = rubric_criterion['id']
                     rubric_points[criterion_id] = [rubric_points[criterion_id][-1]]
-                print('\t\tFound moderator override rubric - choosing final mark as', total_score[0], 'for', submitter)
+                print('\t\tFound moderator override rubric - choosing final mark as', total_score[0], 'for',
+                      submitter['student_number'], 'and including only comments (not points) from other rubrics')
                 # break  # don't just exit - we want to back up other marks even if they are not taken into account
 
         else:
@@ -276,15 +278,16 @@ for submission in filtered_submission_list:
                 # if the moderator has entered a mark and they are not themselves marking, this is always the final mark
                 moderator_override = True
                 total_score = [overall_score]
-                print('\t\tFound moderator override grade - choosing final mark as', total_score, 'for', submitter)
+                print('\t\tFound moderator override grade - choosing final mark as', total_score, 'for',
+                      submitter['student_number'])
                 # break  # don't just exit - we want to back up other marks even if they are not taken into account
             else:
                 total_score.append(overall_score)
 
-    # 3) calculate and post the final mark
+    # 3) calculate and post the final mark (and add to spreadsheet to assist with `--dry-run` mode)
     num_scores = len(total_score)
     if num_scores <= 0:
-        print('\tERROR: found submission with no valid provisional grades; skipping', submitter)
+        print('\tERROR: found submission with no valid provisional grades; skipping', submitter['student_number'])
         skipped_submission = True
         continue
 
@@ -292,7 +295,7 @@ for submission in filtered_submission_list:
     print('\tFound a total of', num_scores, 'valid provisional grades:', total_score)
     if not moderator_override:
         if num_scores < args.minimum_markers:
-            print('\tWARNING:', num_scores, 'provisional grades found for submission from', submitter,
+            print('\tWARNING:', num_scores, 'provisional grades found for submission from', submitter['student_number'],
                   'is less than the `--minimum-markers` threshold of', args.minimum_markers, '- skipping')
             skipped_submission = True
             continue
@@ -301,15 +304,15 @@ for submission in filtered_submission_list:
     print('\tSetting final mark from given list', total_score, 'to', submitter_final_grade)
     final_grades[submitter['canvas_user_id']] = submitter_final_grade
     if submitter_final_grade < 0:
-        print('\tWARNING: unable to set final mark from', total_score, 'for', submitter, '; `calculate_final_grade`',
-              'returned -1')
+        print('\tWARNING: unable to set final mark from', total_score, 'for', submitter['student_number'],
+              '- `calculate_final_grade` returned -1; skipping')
         skipped_submission = True
         continue
 
     print('\t%s a final mark of' % ('DRY RUN: would post' if args.dry_run else 'Posting'), submitter_final_grade, 'for',
-          submitter, '; rubric details: %s, %s' % (rubric_points, rubric_comments) if HAS_RUBRIC else '')
-    if args.dry_run:
-        continue
+          submitter['student_number'], '- rubric: %s, %s' % (rubric_points, rubric_comments) if HAS_RUBRIC else '')
+    spreadsheet.append([submitter['student_number'], submitter['student_name'], '-1', os.path.basename(__file__),
+                        submitter_final_grade])
 
     if HAS_RUBRIC:
         # add a new additional rubric as a summary of the individual markers' comments and scores
@@ -317,14 +320,22 @@ for submission in filtered_submission_list:
                                       'rubric_assessment[assessment_type]': 'grading',
                                       # 'graded_anonymously': True,  # grading anonymously seem to do nothing in reality
                                       'provisional': True, 'final': True}  # provisional+final generates a new rubric
-        for rubric_criterion in rubric:
+
+        row = spreadsheet.max_row
+        for rubric_criterion in rubric:  # collate points/comments and add details to our backup spreadsheet
             points = rubric_points[rubric_criterion['id']]
+            position = rubric_spreadsheet_map[rubric_criterion['id']]
             criteria_index = 'rubric_assessment[criterion_%s]' % rubric_criterion['id']
             if len(points) > 0:
                 average_points = sum(points) / len(points)
                 new_provisional_grade_data['%s[points]' % criteria_index] = average_points
+                spreadsheet['%s%d' % (openpyxl.utils.get_column_letter(position - 1), row)] = average_points
             comments = rubric_comments[rubric_criterion['id']]
             new_provisional_grade_data['%s[comments]' % criteria_index] = '\n\n---\n\n'.join(comments)
+            spreadsheet['%s%d' % (openpyxl.utils.get_column_letter(position), row)] = '\n\n---\n\n'.join(comments)
+
+        if args.dry_run:
+            continue
 
         # create (or update) the final provisional grade and rubric assessment
         rubric_link = '%s/rubric_associations/%d/rubric_assessments' % (API_ROOT, rubric_association['id'])

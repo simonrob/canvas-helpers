@@ -5,7 +5,7 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-21'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-03-31'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -131,7 +131,7 @@ for submission in filtered_submission_list:
                                                                   download_count, download_total, late_status))
 
             else:
-                print('ERROR: download failed for submission from', submitter, 'at', document['url'], '; aborting')
+                print('ERROR: download failed for submission from', submitter, 'at', document['url'], '- aborting')
                 break  # TODO: try next attachment instead? (if one exists)
 
             if len(submission_documents) > 1 and not args.multiple_attachments:

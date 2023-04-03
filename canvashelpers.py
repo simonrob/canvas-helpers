@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-30'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-04-03'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import json
@@ -108,6 +108,16 @@ class Utils:
                                                type_hint='course users list')
 
     @staticmethod
+    def get_course_enrolments(course_url, includes=None, enrolment_types=None):
+        """Get a list of enrolments in a course, which is slightly different to get_course_users in that it allows us to
+        identify the inbuilt test student via their enrolment type 'StudentViewEnrollment'. This function is simply
+        a wrapper around Utils.canvas_multi_page_request, but is kept to separate the API parameter complexity from
+        the scripts that use this method"""
+        params = {'type[]': ['StudentViewEnrollment'] if not enrolment_types else enrolment_types}
+        return Utils.canvas_multi_page_request('%s/enrollments' % course_url, params=params,
+                                               type_hint='filtered course enrolments list')
+
+    @staticmethod
     def get_assignment_submissions(assignment_url, includes=None):
         """Get a list of assignment submissions, returning a string that can be parsed as JSON. This function is simply
         a wrapper around Utils.canvas_multi_page_request, but is kept to separate the API parameter complexity from
@@ -124,11 +134,12 @@ class Utils:
 
     @staticmethod
     def filter_assignment_submissions(submission_list_json, groups_mode=False, include_unsubmitted=False,
-                                      sort_entries=False):
+                                      ignored_users=None, sort_entries=False):
         """Filter a list of submissions (in parsed JSON format). Setting groups_mode to True will remove any users who
         are not in a group, and skip any duplicates (which occur because Canvas associates group submissions with each
         group member individually). Setting include_unsubmitted to True will include all entries, even those that do
-        not actually have a submission"""
+        not actually have a submission. The ignored_users parameter is an array of Canvas user IDs, and is used to
+        remove specific submitters (typically the inbuilt test users)"""
         filtered_submission_list = []
         for submission in submission_list_json:
             ignored_submission = False
@@ -147,6 +158,9 @@ class Utils:
                             ignored_submission = True
                             break
 
+            if ignored_users and submission['user_id'] in ignored_users:
+                ignored_submission = True
+
             if not ignored_submission:
                 filtered_submission_list.append(submission)
 
@@ -157,7 +171,7 @@ class Utils:
 
         print('Loaded', 'and sorted' if sort_entries else '', len(filtered_submission_list), 'valid submissions',
               '(discarded', (len(submission_list_json) - len(filtered_submission_list)),
-              'duplicate, invalid or incomplete)')
+              'filtered, duplicate, invalid or incomplete)')
         return filtered_submission_list
 
     @staticmethod

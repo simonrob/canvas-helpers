@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-30'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-04-03'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -67,8 +67,9 @@ parser.add_argument('--include-unsubmitted', action='store_true',
                     help='Students who have not made a submission for the assignment are skipped by default. Set this '
                          'option if you want to include these students (for example, when no submission is actually '
                          'expected, and the Canvas assignment is used solely to record marks). Note that when not in '
-                         '`--groups` mode this will include any test students and/or staff enrolled as students, but '
-                         'this should not be an issue as no mark, comment or attachment will be available for them')
+                         '`--groups` mode this will include any staff enrolled as students (though not the inbuilt '
+                         'test student), but this should not be an issue as no mark, comment or attachment will be '
+                         'available for them')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
 args = parser.parse_args()  # exits if no assignment URL is provided
@@ -122,11 +123,18 @@ if not submission_list_response:
     print('ERROR: unable to retrieve submission list; aborting')
     exit()
 
+# identify and ignore the inbuilt test student
+course_enrolment_response = Utils.get_course_enrolments(ASSIGNMENT_URL.split('/assignments')[0])
+if not course_enrolment_response:
+    print('ERROR: unable to retrieve course enrolment list; aborting')
+    exit()
+ignored_users = [user['user_id'] for user in json.loads(course_enrolment_response)]
+
 submission_list_json = json.loads(submission_list_response)
 filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json,
                                                                groups_mode=args.groups and not args.groups_individual,
                                                                include_unsubmitted=args.include_unsubmitted,
-                                                               sort_entries=True)
+                                                               ignored_users=ignored_users, sort_entries=True)
 
 submission_count = 0
 submission_total = len(filtered_submission_list)

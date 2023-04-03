@@ -24,7 +24,7 @@ Related tools:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-31'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-04-03'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -46,7 +46,7 @@ parser.add_argument('--include-unsubmitted', action='store_true',
                     help='Students who have not made a submission for the assignment are skipped by default. Set this '
                          'option if you want to include these students (for example, when no submission is actually '
                          'expected, and the Canvas assignment is used solely to record marks). Please note that this '
-                         'will include any test students and/or staff enrolled as students')
+                         'will include any staff enrolled as students, but not the inbuilt test student')
 parser.add_argument('--minimum-markers', type=int, default=2,  # TODO: get this from the assignment?
                     help='It can be helpful to run this script to review grading outcomes before all marking has been '
                          'completed. Use this parameter to set a minimum threshold for the number of individual marks '
@@ -109,6 +109,7 @@ print('Configuring moderated assignment', ASSIGNMENT_ID, ('(with rubric)' if HAS
 rubric = []
 rubric_association = None
 rubric_spreadsheet_map = {}
+rubric_points_hidden = False
 spreadsheet_headers = ['Student Number', 'Student Name', 'Marker ID', 'Marker Name', 'Overall Mark']  # backup only
 if HAS_RUBRIC:
     rubric_id = assignment_details_json['rubric_settings']['id']
@@ -133,12 +134,15 @@ if HAS_RUBRIC:
     for association in rubric_associations_json['associations']:
         if association['association_id'] == ASSIGNMENT_ID:  # rubrics can be associated with multiple assignments
             rubric_association = association
+            rubric_points_hidden = association['hide_points']
+            break
     if not rubric_association:
         print('ERROR: unable to get rubric', rubric_id, 'association; aborting')
         exit()
 
     print('Found rubric criteria:', rubric)
-    print('Found rubric association', rubric_association['id'], '-', rubric_association)
+    print('Found rubric association', rubric_association['id'], '(points hidden: %s) -' % rubric_points_hidden,
+          rubric_association)
 
 # moderation of marks involves irreversible changes, so we back up the current state to a spreadsheet
 workbook = openpyxl.Workbook()
@@ -165,10 +169,17 @@ if not submission_list_response:
     print('ERROR: unable to retrieve submission list; aborting')
     exit()
 
+# identify and ignore the inbuilt test student
+course_enrolment_response = Utils.get_course_enrolments(API_ROOT)
+if not course_enrolment_response:
+    print('ERROR: unable to retrieve course enrolment list; aborting')
+    exit()
+ignored_users = [user['user_id'] for user in json.loads(course_enrolment_response)]
+
 submission_list_json = json.loads(submission_list_response)  # note: groups mode cannot be used when enabling moderation
 filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json,
                                                                include_unsubmitted=args.include_unsubmitted,
-                                                               sort_entries=True)
+                                                               ignored_users=ignored_users, sort_entries=True)
 
 final_grades = {}
 skipped_submission = False
@@ -227,10 +238,11 @@ for submission in filtered_submission_list:
                 continue
 
             rubric_assessment = scorer_grade['rubric_assessments'][0]  # safe: there is only one assessment per marker
-            print('\t\tFound rubric assessment from', user_map[scorer_id], '-', rubric_assessment)
+            print('\t\tFound rubric assessment from', user_map[scorer_id],
+                  '(hidden points)' if rubric_points_hidden else '', '-', rubric_assessment)
 
             rubric_score = rubric_assessment['score']
-            if rubric_score is None:  # score can be none if the marker (or moderator) has not yet completed the task
+            if rubric_score is None and not rubric_points_hidden:  # can be none if the marker/moderator has not marked
                 print('\t\tWARNING: skipping rubric assessment from', user_map[scorer_id], 'with no score entered')
                 continue
 
@@ -238,14 +250,14 @@ for submission in filtered_submission_list:
             for criterion in rubric_assessment['data']:
                 criterion_id = criterion['criterion_id']
 
-                # add rubric details to our backup spreadsheet
+                # add rubric details to our backup spreadsheet, then build them into the final rubric (even if we have
+                # overridden these points in the final mark calculation)
                 position = rubric_spreadsheet_map[criterion_id]
-                spreadsheet['%s%d' % (openpyxl.utils.get_column_letter(position - 1), row)] = criterion['points']
-                spreadsheet['%s%d' % (openpyxl.utils.get_column_letter(position), row)] = criterion['comments']
-
-                # then build them into the final rubric (even if we have overridden in the final calculation)
-                rubric_points[criterion_id].append(criterion['points'])
-                if criterion['comments']:
+                if 'points' in criterion:
+                    spreadsheet['%s%d' % (openpyxl.utils.get_column_letter(position - 1), row)] = criterion['points']
+                    rubric_points[criterion_id].append(criterion['points'])
+                if criterion['comments_enabled'] and criterion['comments']:
+                    spreadsheet['%s%d' % (openpyxl.utils.get_column_letter(position), row)] = criterion['comments']
                     scorer_identity = '%s: ' % user_map[scorer_id] if args.identify_rubric_markers else ''
                     rubric_comments[criterion_id].append('%s%s' % (scorer_identity, criterion['comments']))
 
@@ -253,8 +265,9 @@ for submission in filtered_submission_list:
                 continue  # we've already overridden this mark - back it up, but don't include it in the calculation
 
             if overall_score and overall_score != rubric_score:
-                print('\t\tWARNING: overall score from', user_map[scorer_id], 'of', overall_score, 'differs from',
-                      'rubric score of', rubric_score, '- using overall score rather than rubric for calculation')
+                if not rubric_points_hidden:
+                    print('\t\tWARNING: overall score from', user_map[scorer_id], 'of', overall_score, 'differs from',
+                          'rubric score of', rubric_score, '- using overall score rather than rubric for calculation')
                 total_score.append(overall_score)
             else:
                 total_score.append(rubric_score)
@@ -394,6 +407,9 @@ else:
 # so it is normally best to just take the rubric score as the final mark (editable in the rubric's settings)
 for submission in filtered_submission_list:
     submitter = Utils.get_submitter_details(submission)
+    if submitter['canvas_user_id'] not in final_grades:
+        print('Skipping unmarked submission from', submitter)
+        continue
     final_grade_data = {'submission[posted_grade]': final_grades[submitter['canvas_user_id']]}
     if HAS_RUBRIC:
         final_grade_data['comment[text_comment]'] = 'See the rubric for scores and a summary of marker feedback'

@@ -4,7 +4,7 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-30'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-04-04'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -51,7 +51,8 @@ parser.add_argument('--delete-conversation-attachments', action='store_true',
                          'Canvas per-user storage allowance. It is time-consuming to use the web interface to remove '
                          'files and restore space; instead, running the script with this parameter will remove *all* '
                          'files in your account\'s `conversation attachments` folder. If this parameter is set, all '
-                         'others except `--dry-run` are ignored, and the script will exit after completion.')
+                         'others except `--dry-run` are ignored, and the script will exit after completion. Once '
+                         'deleted, attachments are unavailable to both yourself *and* message recipients')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
 args = parser.parse_args()  # exits if no assignment URL is provided
@@ -175,7 +176,7 @@ for user in course_user_json:
     conversation_message = args.conversation_message
     if student_number in comments_map:
         conversation_message = comments_map[student_number]
-    elif attachment_file is None:
+    elif attachment_file is None and args.conversation_message == parser.get_default('conversation_message'):
         print('WARNING: could not find attachment/message for conversation (at least one item is required); skipping')
         continue
 
@@ -234,6 +235,7 @@ for user in course_user_json:
         print('\tERROR: unable to send conversation message and/or associate attachment; skipping recipient')
         continue
 
+    # sadly it is not possible to link directly to the newly-sent message
     print('\tMessage successfully sent to user', canvas_id, '(%s)' % student_number)
 
     if args.delete_after_sending:
@@ -241,6 +243,6 @@ for user in course_user_json:
         message_deletion_response = requests.delete('%s/conversations/%d' % (API_ROOT, sent_message[0]['id']),
                                                     headers=Utils.canvas_api_headers())
         if message_deletion_response.status_code == 200:
-            print('\tRemoved message from your Sent items folder')
+            print('\tRemoved message from your sent items folder')
         else:
             print('\tWARNING: unable to remove message from your sent items folder:', message_deletion_response.text)

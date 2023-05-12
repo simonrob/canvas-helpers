@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-04-03'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-12'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import json
@@ -171,7 +171,7 @@ class Utils:
 
         print('Loaded', 'and sorted' if sort_entries else '', len(filtered_submission_list), 'valid submissions',
               '(discarded', (len(submission_list_json) - len(filtered_submission_list)),
-              'filtered, duplicate, invalid or incomplete)')
+              'filtered, duplicate, invalid/incomplete or missing)')
         return filtered_submission_list
 
     @staticmethod

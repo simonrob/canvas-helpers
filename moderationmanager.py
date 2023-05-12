@@ -24,7 +24,7 @@ Related tools:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-04-03'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-12'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -180,9 +180,12 @@ submission_list_json = json.loads(submission_list_response)  # note: groups mode
 filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json,
                                                                include_unsubmitted=args.include_unsubmitted,
                                                                ignored_users=ignored_users, sort_entries=True)
+if len(filtered_submission_list) <= 0:
+    print('No valid submissions found; aborting')
+    exit()
 
 final_grades = {}
-skipped_submission = False
+skipped_submissions = set()  # we collate a list of student names whose submissions generated an error/warning
 for submission in filtered_submission_list:
     submitter = Utils.get_submitter_details(submission)
     if not submitter:
@@ -192,7 +195,7 @@ for submission in filtered_submission_list:
     print('\nProcessing submission from', submitter)
     if 'provisional_grades' not in submission:
         print('\tWARNING: no provisional grades found for submission; skipping:', submitter['student_number'])
-        skipped_submission = True
+        skipped_submissions.add(submitter['student_name'])
         continue
 
     final_grade_id = -1
@@ -234,6 +237,8 @@ for submission in filtered_submission_list:
         print('\tFound provisional grade from', user_map[scorer_id], scorer_grade)
         if HAS_RUBRIC:
             if len(scorer_grade['rubric_assessments']) <= 0:
+                # an overall assessment score has been entered, but no rubric details - often this is a submission given
+                # 0 where there was no need to complete the rubric (e.g., absent); best to highlight for manual checking
                 print('\t\tWARNING: skipping provisional grade from', user_map[scorer_id], 'with no rubric assessment')
                 continue
 
@@ -301,7 +306,7 @@ for submission in filtered_submission_list:
     num_scores = len(total_score)
     if num_scores <= 0:
         print('\tERROR: found submission with no valid provisional grades; skipping', submitter['student_number'])
-        skipped_submission = True
+        skipped_submissions.add(submitter['student_name'])
         continue
 
     total_score = sorted(total_score)
@@ -310,7 +315,7 @@ for submission in filtered_submission_list:
         if num_scores < args.minimum_markers:
             print('\tWARNING:', num_scores, 'provisional grades found for submission from', submitter['student_number'],
                   'is less than the `--minimum-markers` threshold of', args.minimum_markers, '- skipping')
-            skipped_submission = True
+            skipped_submissions.add(submitter['student_name'])
             continue
 
     submitter_final_grade = calculate_final_grade(total_score) if num_scores > 1 else total_score[0]
@@ -319,7 +324,7 @@ for submission in filtered_submission_list:
     if submitter_final_grade < 0:
         print('\tWARNING: unable to set final mark from', total_score, 'for', submitter['student_number'],
               '- `calculate_final_grade` returned -1; skipping')
-        skipped_submission = True
+        skipped_submissions.add(submitter['student_name'])
         continue
 
     print('\t%s a final mark of' % ('DRY RUN: would post' if args.dry_run else 'Posting'), submitter_final_grade, 'for',
@@ -364,7 +369,7 @@ for submission in filtered_submission_list:
                                                headers=Utils.canvas_api_headers())
         if create_rubric_response.status_code != 200:
             print('\t\tERROR: rubric creation/update failed; skipping', create_rubric_response.text)
-            skipped_submission = True
+            skipped_submissions.add(submitter['student_name'])
             continue
         final_grade_id = create_rubric_response.json()['artifact']['provisional_grade_id']  # update if newly created
 
@@ -374,7 +379,7 @@ for submission in filtered_submission_list:
         if provisional_grade_selection_response.status_code != 200:
             print('\t\tERROR: unable to select final provisional grade for submission; aborting. Please make sure',
                   'this tool is being run as the assignment moderator')
-            skipped_submission = True
+            skipped_submissions.add(submitter['student_name'])
             continue
 
 workbook.save(args.backup_file)
@@ -382,40 +387,65 @@ if args.dry_run:
     print('\nDRY RUN: exiting without releasing grades')
     exit()
 
-if skipped_submission:
-    print('\nERROR: unable to finalise grades from all submissions (see previous messages); aborting')
-    exit()
-
 # 4) "release" final grades - it is unclear what the purpose of this step is - it means no new marks can be entered, but
 # is required in order to be able to set the final grade if this is different to the rubric calculation
-post_grades_response = requests.post('%s/provisional_grades/publish' % ASSIGNMENT_URL,
-                                     headers=Utils.canvas_api_headers())
-if post_grades_response.status_code != 200:
-    if post_grades_response.status_code == 400 and \
-            post_grades_response.json()['message'] == 'Assignment grades have already been published':  # improvable?
-        print('\nSkipping mark release - moderated grades have already been released')
+print('\nReleasing moderated grades')
+grades_released = False
+grades_released_message = 'Assignment grades have already been published'  # Canvas's error message on failure
+
+# we don't release grades if there are any potential issues, so need to check the release status first - if grades have
+# already been released, however, we *do* proceed to finalising the grades from the calculated values (which affects
+# assignments where the rubric is not used for grading, and `--mark-rounding` adjustments)
+# note: the only way to detect the grade release status without attempting to actually release grades seems to be to
+# submit a request for a provisional grade for any student and check the text(!) of the error message
+first_student = {'student_id': Utils.get_submitter_details(next(iter(filtered_submission_list)))['canvas_user_id']}
+provisional_grade_selection_response = requests.get('%s/provisional_grades/status' % ASSIGNMENT_URL,
+                                                    data=first_student, headers=Utils.canvas_api_headers())
+if provisional_grade_selection_response.status_code == 400 and \
+        provisional_grade_selection_response.json()['message'] == grades_released_message:
+    grades_released = True
+print('\tModerated provisional grades have %s been released' % ('already' if grades_released else 'not'))
+
+if skipped_submissions and not grades_released:
+    print('\tERROR: not all submissions could be assigned finalised grades; aborting')
+    print('\tPlease visit %s/moderate' % args.url[0], 'to check moderation, paying particular attention to students',
+          'who could not be automatically moderated (see previous messages for error details):', skipped_submissions)
+    print('\tClick "Release Grades" on that page if you are happy with the outputs, then re-run this tool to finalise',
+          'grades. Note that grades will still not be visible to students until you actually post them')
+    exit()
+
+if not grades_released:
+    post_grades_response = requests.post('%s/provisional_grades/publish' % ASSIGNMENT_URL,
+                                         headers=Utils.canvas_api_headers())
+    if post_grades_response.status_code != 200:
+        if post_grades_response.status_code == 400 and \
+                post_grades_response.json()['message'] == grades_released_message:
+            # somehow we got a different response here to the result of our earlier check...
+            print('\tModerated provisional grades have already been released; skipping')
+        else:
+            print('\tERROR: unable to release provisional outcomes and select final grades')
+            print('Visit %s/moderate' % args.url[0], 'and click "Release Grades", then re-run this tool to finalise',
+                  'grades. Note that grades will still not be visible to students until you actually post them')
+            exit()
     else:
-        print('ERROR: unable to release grades for assignment and select final grades - please manually release '
-              'moderated grades and re-run this tool (grades will still not be shown to students until you actually '
-              'post them): visit %s/moderate' % args.url[0], 'and click "Release Grades"')
-        exit()
-else:
-    print('\nSuccessfully released moderated grades:', post_grades_response.text)
+        print('\tSuccessfully released moderated grades:', post_grades_response.text)
 
 # 5) update the final grade to reflect the average, and (in rubric mode) ensure overridden grades are included
 # note that this can lead to confusion if, e.g., a high-scoring rubric is overridden with a low score or vice-versa,
 # so it is normally best to just take the rubric score as the final mark (editable in the rubric's settings)
+print('\nUpdating final assignment grades')
+score_feedback_hint = 'See the rubric for criteria scores and a summary of marker feedback (if available)'
 for submission in filtered_submission_list:
     submitter = Utils.get_submitter_details(submission)
     if submitter['canvas_user_id'] not in final_grades:
-        print('Skipping unmarked submission from', submitter)
+        print('\tSkipping unmarked submission from', submitter)
         continue
     final_grade_data = {'submission[posted_grade]': final_grades[submitter['canvas_user_id']]}
     if HAS_RUBRIC:
-        final_grade_data['comment[text_comment]'] = 'See the rubric for scores and a summary of marker feedback'
+        final_grade_data['comment[text_comment]'] = score_feedback_hint
     user_submission_url = '%s/submissions/%d' % (ASSIGNMENT_URL, submitter['canvas_user_id'])
     final_grade_response = requests.put(user_submission_url, data=final_grade_data, headers=Utils.canvas_api_headers())
     if final_grade_response.status_code != 200:
-        print(final_grade_response.text)
+        print('\t%s' % final_grade_response.text)
         print('\tERROR: unable to finalise assignment mark/comment; skipping submission from', submitter)
         continue

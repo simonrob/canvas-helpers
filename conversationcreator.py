@@ -4,7 +4,7 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-04-04'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-12'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -235,8 +235,10 @@ for user in course_user_json:
         print('\tERROR: unable to send conversation message and/or associate attachment; skipping recipient')
         continue
 
-    # sadly it is not possible to link directly to the newly-sent message
-    print('\tMessage successfully sent to user', canvas_id, '(%s)' % student_number)
+    # the link we print is the same as the one Canvas itself uses in notification emails, but the current web behaviour
+    # is to redirect rather uselessly to the message inbox (or return 404 if --delete-after-sending has been set)
+    print('\tMessage successfully sent to user', canvas_id, '(%s)' % student_number, ':',
+          '%s/conversations/%d' % (args.url[0].split('/courses')[0], message_creation_response.json()[0]['id']))
 
     if args.delete_after_sending:
         sent_message = message_creation_response.json()

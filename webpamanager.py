@@ -19,7 +19,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-31'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-12'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -36,7 +36,7 @@ import requests
 
 from canvashelpers import Utils
 
-webpa_headers = ['Respondent', 'Person', 'Student №', 'Rating', 'Comments', 'Group №']
+webpa_headers = ['Respondent', 'Person', 'Student №', 'Rating', 'Comments (optional)', 'Group №']
 
 parser = argparse.ArgumentParser()
 parser.add_argument('group', nargs=1,

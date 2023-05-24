@@ -5,7 +5,7 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-31'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -13,6 +13,7 @@ import datetime
 import functools
 import json
 import os
+import sys
 
 import openpyxl.utils
 import requests
@@ -48,7 +49,7 @@ os.makedirs(working_directory, exist_ok=True)
 OUTPUT_DIRECTORY = '%s/%d' % (working_directory, ASSIGNMENT_ID)
 if os.path.exists(OUTPUT_DIRECTORY):
     print('ERROR: assignment output directory', OUTPUT_DIRECTORY, 'already exists - please remove or rename')
-    exit()
+    sys.exit()
 os.mkdir(OUTPUT_DIRECTORY)
 
 speedgrader_file = None
@@ -67,7 +68,7 @@ else:
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if not submission_list_response:
     print('ERROR: unable to retrieve submission list - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
-    exit()
+    sys.exit()
 
 submission_list_json = json.loads(submission_list_response)
 filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, groups_mode=args.groups,
@@ -108,7 +109,7 @@ for submission in filtered_submission_list:
             if os.path.exists(submission_output_directory):
                 print('ERROR: output directory', submission_output_directory,
                       'already exists - please remove or rename the root assignment output folder')
-                exit()
+                sys.exit()
             os.mkdir(submission_output_directory)
 
         submission_documents = submission['attachments']

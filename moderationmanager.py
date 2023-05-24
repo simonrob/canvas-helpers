@@ -24,11 +24,12 @@ Related tools:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-12'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
 import os
+import sys
 
 import openpyxl.utils
 import openpyxl.worksheet.dimensions
@@ -90,7 +91,7 @@ API_ROOT = ASSIGNMENT_URL.split('/assignments')[0]
 USER_ID, user_name = Utils.get_user_details(API_ROOT, user_id='self')
 if not USER_ID:
     print('ERROR: unable to get user details - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
-    exit()
+    sys.exit()
 print('Running moderation manager as %s (%d) with moderator marking: %r' % (user_name, USER_ID, args.moderator_marking))
 user_map = {USER_ID: user_name}  # for use in backup file and log messages
 
@@ -98,7 +99,7 @@ user_map = {USER_ID: user_name}  # for use in backup file and log messages
 assignment_details_response = requests.get(ASSIGNMENT_URL, headers=Utils.canvas_api_headers())
 if assignment_details_response.status_code != 200:
     print('ERROR: unable to get assignment details - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
-    exit()
+    sys.exit()
 assignment_details_json = assignment_details_response.json()
 HAS_RUBRIC = 'rubric' in assignment_details_json
 if not assignment_details_json['moderated_grading']:
@@ -120,7 +121,7 @@ if HAS_RUBRIC:
                                                 headers=Utils.canvas_api_headers())
     if rubric_associations_response.status_code != 200:
         print('ERROR: unable to get rubric', rubric_id, 'details; aborting')
-        exit()
+        sys.exit()
 
     # extract the rubric's criteria and create columns for our backup spreadsheet
     rubric_associations_json = rubric_associations_response.json()
@@ -138,7 +139,7 @@ if HAS_RUBRIC:
             break
     if not rubric_association:
         print('ERROR: unable to get rubric', rubric_id, 'association; aborting')
-        exit()
+        sys.exit()
 
     print('Found rubric criteria:', rubric)
     print('Found rubric association', rubric_association['id'], '(points hidden: %s) -' % rubric_points_hidden,
@@ -167,13 +168,13 @@ submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL,
                                                             includes=['provisional_grades', 'rubric_assessment'])
 if not submission_list_response:
     print('ERROR: unable to retrieve submission list; aborting')
-    exit()
+    sys.exit()
 
 # identify and ignore the inbuilt test student
 course_enrolment_response = Utils.get_course_enrolments(API_ROOT)
 if not course_enrolment_response:
     print('ERROR: unable to retrieve course enrolment list; aborting')
-    exit()
+    sys.exit()
 ignored_users = [user['user_id'] for user in json.loads(course_enrolment_response)]
 
 submission_list_json = json.loads(submission_list_response)  # note: groups mode cannot be used when enabling moderation
@@ -182,7 +183,7 @@ filtered_submission_list = Utils.filter_assignment_submissions(submission_list_j
                                                                ignored_users=ignored_users, sort_entries=True)
 if len(filtered_submission_list) <= 0:
     print('No valid submissions found; aborting')
-    exit()
+    sys.exit()
 
 final_grades = {}
 skipped_submissions = set()  # we collate a list of student names whose submissions generated an error/warning
@@ -385,7 +386,7 @@ for submission in filtered_submission_list:
 workbook.save(args.backup_file)
 if args.dry_run:
     print('\nDRY RUN: exiting without releasing grades')
-    exit()
+    sys.exit()
 
 # 4) "release" final grades - it is unclear what the purpose of this step is - it means no new marks can be entered, but
 # is required in order to be able to set the final grade if this is different to the rubric calculation
@@ -412,7 +413,7 @@ if skipped_submissions and not grades_released:
           'who could not be automatically moderated (see previous messages for error details):', skipped_submissions)
     print('\tClick "Release Grades" on that page if you are happy with the outputs, then re-run this tool to finalise',
           'grades. Note that grades will still not be visible to students until you actually post them')
-    exit()
+    sys.exit()
 
 if not grades_released:
     post_grades_response = requests.post('%s/provisional_grades/publish' % ASSIGNMENT_URL,
@@ -426,7 +427,7 @@ if not grades_released:
             print('\tERROR: unable to release provisional outcomes and select final grades')
             print('Visit %s/moderate' % args.url[0], 'and click "Release Grades", then re-run this tool to finalise',
                   'grades. Note that grades will still not be visible to students until you actually post them')
-            exit()
+            sys.exit()
     else:
         print('\tSuccessfully released moderated grades:', post_grades_response.text)
 

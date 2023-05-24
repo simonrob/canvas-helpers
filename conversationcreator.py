@@ -4,13 +4,14 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-12'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
 import json
 import mimetypes
 import os
+import sys
 
 import openpyxl
 import requests
@@ -70,17 +71,17 @@ if args.delete_conversation_attachments:
                                         headers=Utils.canvas_api_headers())
     if attachments_response.status_code != 200:
         print('ERROR: unable to find your `%s` folder; aborting' % folder_name)
-        exit()
+        sys.exit()
     attachments_folder = attachments_response.json()[-1]  # resolve provides the requested folder last
     if attachments_folder['name'] != folder_name:
         print('ERROR: unable to match your `%s` folder; aborting' % folder_name)
-        exit()
+        sys.exit()
 
     folder_id = attachments_folder['id']
     user_files = Utils.canvas_multi_page_request('%s/users/self/files' % API_ROOT, type_hint='files')
     if not user_files:
         print('No files found in your user account; nothing to do')
-        exit()
+        sys.exit()
 
     user_files_json = json.loads(user_files)
     files_to_delete = []
@@ -92,7 +93,7 @@ if args.delete_conversation_attachments:
         print('DRY RUN: would delete' if args.dry_run else 'Deleting', len(files_to_delete),
               'files from your `%s` folder' % folder_name)
         if args.dry_run:
-            exit()
+            sys.exit()
         for file_id in files_to_delete:
             delete_request = requests.delete('%s/files/%d' % (API_ROOT, file_id),
                                              headers=Utils.canvas_api_headers())
@@ -100,7 +101,7 @@ if args.delete_conversation_attachments:
                 print('Deleted file', delete_request.text)
     else:
         print('No files found in your `%s` folder; nothing to do' % folder_name)
-    exit()
+    sys.exit()
 
 INPUT_DIRECTORY = os.path.join(
     os.path.dirname(os.path.realpath(__file__)) if args.working_directory is None else args.working_directory,
@@ -108,7 +109,7 @@ INPUT_DIRECTORY = os.path.join(
 if not os.path.exists(INPUT_DIRECTORY):
     print('ERROR: input directory not found - please place all files to upload (and any `--comments-file`) in the '
           'folder %s' % INPUT_DIRECTORY)
-    exit()
+    sys.exit()
 print('%screating conversations for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))
 
 # load and parse comments
@@ -135,13 +136,13 @@ if args.comments_file:
 course_user_response = Utils.get_course_users(COURSE_URL, enrolment_types=['student'])
 if not course_user_response:
     print('ERROR: unable to retrieve course student list; aborting')
-    exit()
+    sys.exit()
 course_user_json = json.loads(course_user_response)
 
 SELF_ID, user_name = Utils.get_user_details(API_ROOT, user_id='self')
 if not SELF_ID:
     print('ERROR: unable to retrieve your Canvas ID; aborting')
-    exit()
+    sys.exit()
 # conversation attachments cannot be in sub-folders(!), but Canvas automatically handles duplicates (by renaming)
 # FILES_SUBFOLDER_PATH = 'conversation attachments/%s/%d/%d' % (
 #     os.path.splitext(os.path.basename(__file__))[0], COURSE_ID, int(time.time()))

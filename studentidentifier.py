@@ -7,10 +7,11 @@ any existing data lost*) if it is present."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-03-01'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
+import sys
 
 import requests
 
@@ -63,7 +64,7 @@ else:
                                                   headers=Utils.canvas_api_headers())
     if custom_column_request_response.status_code != 200:
         print('\tERROR: unable to create/update custom column; aborting')
-        exit()
+        sys.exit()
 
     custom_column_id = custom_column_request_response.json()['id']
     print('Successfully %s custom column %d; now adding user data' % (
@@ -73,7 +74,7 @@ else:
 course_user_response = Utils.get_course_users(COURSE_URL, enrolment_types=['student'])
 if not course_user_response:
     print('ERROR: unable to retrieve course student list; aborting')
-    exit()
+    sys.exit()
 
 course_user_json = json.loads(course_user_response)
 
@@ -91,7 +92,7 @@ if not args.individual_upload:
 
     if args.dry_run:
         print('DRY RUN: would bulk upload', len(column_user_data), 'records')
-        exit()
+        sys.exit()
 
     column_data_response = requests.put('%s/custom_gradebook_column_data' % COURSE_URL,
                                         json={'column_data': column_user_data}, headers=Utils.canvas_api_headers())
@@ -101,7 +102,7 @@ if not args.individual_upload:
         print('ERROR: unable to save custom column user data; aborting')
     else:
         print('Successfully submitted bulk data update for column', custom_column_id)
-    exit()
+    sys.exit()
 
 # individual upload, submitting a separate request for each user and recovering from errors
 for user in course_user_json:

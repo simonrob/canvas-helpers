@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-12'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import json
@@ -30,7 +30,7 @@ class Config:
 class Utils:
     @staticmethod
     def course_url_to_api(url):
-        return url.replace('/courses', '/api/v1/courses')
+        return url.rstrip('/').replace('/courses', '/api/v1/courses')
 
     @staticmethod
     def course_url_to_speedgrader(url, add_student_id=None):

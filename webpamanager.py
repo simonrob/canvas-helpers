@@ -19,7 +19,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-12'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -88,7 +88,7 @@ try:
     GROUP_ID = int(GROUP_ID)
 except ValueError:
     print('ERROR: unable to get group set ID from given URL', args.group[0])
-    exit()
+    sys.exit()
 print('%s WebPA forms for group set %s' % ('Creating' if args.setup else 'Processing', GROUP_ID))
 
 TEMPLATE_FILE = args.setup_template
@@ -97,7 +97,7 @@ working_directory = os.path.dirname(
 WORKING_DIRECTORY = os.path.join(working_directory, str(GROUP_ID))
 if args.setup and os.path.exists(WORKING_DIRECTORY):
     print('ERROR: WebPA setup output directory', WORKING_DIRECTORY, 'already exists - please remove or rename')
-    exit()
+    sys.exit()
 os.makedirs(WORKING_DIRECTORY, exist_ok=True)
 
 if TEMPLATE_FILE:
@@ -117,7 +117,7 @@ group_set_response = requests.get('https://canvas.swansea.ac.uk/api/v1/group_cat
                                   headers=Utils.canvas_api_headers())
 if group_set_response.status_code != 200:
     print('\tERROR: unable to load group sets; aborting')
-    exit()
+    sys.exit()
 
 group_cache_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
 cache_file_name = group_cache_file.name
@@ -192,7 +192,7 @@ if args.setup:
         response_template_sheet.delete_rows(initial_max_rows + 1,
                                             response_template_sheet.max_row - initial_max_rows)
     print('Successfully generated', output_count, 'WebPA forms to', WORKING_DIRECTORY)
-    exit()
+    sys.exit()
 
 # processing mode - first load the marks to use as the baseline
 marks_map = {}
@@ -213,7 +213,7 @@ if args.marks_file:
     else:
         print('ERROR: marks mapping file', args.marks_file, 'not found in assignment directory at', marks_file,
               '- aborting')
-        exit()
+        sys.exit()
 
 # next, load responses and create a master spreadsheet containing all rater responses
 response_files = [f for f in os.listdir(WORKING_DIRECTORY) if re.match(r'\d+\.xlsx', f)]
@@ -332,7 +332,7 @@ print('Skipped', len(skipped_files), 'invalid or tampered submissions from:', [f
 response_files = [f for f in response_files if f not in skipped_files]  # remove invalid files from response calculation
 if len(response_files) <= 0:
     print('ERROR: unable to continue; no valid response files to analyse')
-    exit()
+    sys.exit()
 
 # finally, shape original marks according to the summary file of group member ratings (using pandas for ease)
 data = pandas.read_excel(response_summary_file, dtype={'Rater': str, 'Subject': str})  # student number is a string

@@ -5,13 +5,14 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-04-03'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
 import json
 import mimetypes
 import os
+import sys
 
 import openpyxl
 import requests
@@ -82,7 +83,7 @@ INPUT_DIRECTORY = os.path.join(
 if not os.path.exists(INPUT_DIRECTORY):
     print('ERROR: input directory not found - please place all files to upload (and any `--marks-file`) in the '
           'folder %s' % INPUT_DIRECTORY)
-    exit()
+    sys.exit()
 print('%sUploading assignment feedback from %s to assignment %s' % (
     'DRY RUN: ' if args.dry_run else '', INPUT_DIRECTORY, args.url[0]))
 
@@ -107,7 +108,7 @@ if args.marks_file:
 assignment_details_response = requests.get(ASSIGNMENT_URL, headers=Utils.canvas_api_headers())
 if assignment_details_response.status_code != 200:
     print('ERROR: unable to get assignment details - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
-    exit()
+    sys.exit()
 maximum_marks = assignment_details_response.json()['points_possible']
 mark_exceeded = False
 for mark_row in marks_map:
@@ -116,18 +117,18 @@ for mark_row in marks_map:
               '-', marks_map[mark_row])
         mark_exceeded = True
 if mark_exceeded:
-    exit()
+    sys.exit()
 
 submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
 if not submission_list_response:
     print('ERROR: unable to retrieve submission list; aborting')
-    exit()
+    sys.exit()
 
 # identify and ignore the inbuilt test student
 course_enrolment_response = Utils.get_course_enrolments(ASSIGNMENT_URL.split('/assignments')[0])
 if not course_enrolment_response:
     print('ERROR: unable to retrieve course enrolment list; aborting')
-    exit()
+    sys.exit()
 ignored_users = [user['user_id'] for user in json.loads(course_enrolment_response)]
 
 submission_list_json = json.loads(submission_list_response)

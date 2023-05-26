@@ -5,7 +5,7 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-05-26'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -13,6 +13,7 @@ import datetime
 import functools
 import json
 import os
+import re
 import sys
 
 import openpyxl.utils
@@ -33,6 +34,12 @@ parser.add_argument('--speedgrader-file', default=None,
                          'SpeedGrader page for the assignment, which is useful when marking activities such as '
                          'presentations or ad hoc tasks. No attachments are downloaded in this mode')
 parser.add_argument('--groups', action='store_true', help='Use this option if the assignment is completed in groups')
+parser.add_argument('--submitter-pattern', default=None,
+                    help='Use this option to pass a (case-insensitive) regular expression pattern that will be used to '
+                         'filter and select only submitters whose names *or* student numbers match. For example,'
+                         '`^Matt(?:hew)?\\w*` will match only students whose first name is `Matt` or `Matthew`, '
+                         'whereas `^123\\d{3}$` will match six–digit student numbers starting with `123`. In groups '
+                         'mode this pattern is used to match group names only')
 parser.add_argument('--multiple-attachments', action='store_true',
                     help='Use this option if there are multiple assignment attachments per student or group. This '
                          'will change the behaviour of the script so that a new subfolder is created for each '
@@ -80,6 +87,22 @@ def compare_attachment_dates(a1, a2):
     a2_created = int(datetime.datetime.fromisoformat(a2['created_at'].replace('Z', '+00:00')).timestamp())
     return a2_created - a1_created  # sort in descending order of creation date
 
+
+def filter_matched_submissions(single_submission):
+    submitter_details = Utils.get_submitter_details(single_submission, groups_mode=args.groups)
+    if args.groups:
+        return submitter_matcher.match(submitter_details['group_name'])
+    return submitter_matcher.match(submitter_details['student_number']) or submitter_matcher.match(
+        submitter_details['student_name'])
+
+
+submitter_matcher = None
+if args.submitter_pattern:
+    submitter_matcher = re.compile(args.submitter_pattern, flags=re.IGNORECASE)
+    matched_submissions = list(filter(filter_matched_submissions, filtered_submission_list))
+    print('Filtered', len(filtered_submission_list), 'valid submissions using pattern "%s"' % args.submitter_pattern,
+          '-', len(matched_submissions), 'valid submissions remaining')
+    filtered_submission_list = matched_submissions
 
 download_count = 0
 download_total = len(filtered_submission_list)

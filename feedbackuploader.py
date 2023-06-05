@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-05'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -71,6 +71,11 @@ parser.add_argument('--include-unsubmitted', action='store_true',
                          '`--groups` mode this will include any staff enrolled as students (though not the inbuilt '
                          'test student), but this should not be an issue as no mark, comment or attachment will be '
                          'available for them')
+parser.add_argument('--delete-existing', action='store_true',
+                    help='Delete all existing comments created by your Canvas user before adding any new feedback '
+                         '(removing both manually-created comments and ones added via API scripts such as this one). '
+                         'If comments have attachments, the attachments will also become inaccessible. Note that this '
+                         'option does not change any marks that have been entered; only comments are removed.')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
 args = parser.parse_args()  # exits if no assignment URL is provided
@@ -119,7 +124,7 @@ for mark_row in marks_map:
 if mark_exceeded:
     sys.exit()
 
-submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL)
+submission_list_response = Utils.get_assignment_submissions(ASSIGNMENT_URL, includes=['submission_comments'])
 if not submission_list_response:
     print('ERROR: unable to retrieve submission list; aborting')
     sys.exit()
@@ -136,6 +141,36 @@ filtered_submission_list = Utils.filter_assignment_submissions(submission_list_j
                                                                groups_mode=args.groups and not args.groups_individual,
                                                                include_unsubmitted=args.include_unsubmitted,
                                                                ignored_users=ignored_users, sort_entries=True)
+
+if args.delete_existing:
+    print('\nDeleting existing submission comments created by your Canvas user')
+    SELF_ID, user_name = Utils.get_user_details(ASSIGNMENT_URL.split('/courses')[0], user_id='self')
+    if not SELF_ID:
+        print('\tERROR: unable to retrieve your Canvas ID; aborting')
+        sys.exit()
+
+    skipped_comments = 0
+    for submission in filtered_submission_list:
+        if 'submission_comments' in submission:
+            for comment in submission['submission_comments']:
+                if comment['author_id'] != SELF_ID:
+                    skipped_comments += 1
+                    continue
+
+                if args.dry_run:
+                    print('\tDRY RUN: skipping deletion of existing comment:', comment)
+                    continue
+
+                comment_deletion_url = '%s/submissions/%d/comments/%d' % (
+                    ASSIGNMENT_URL, submission['user_id'], comment['id'])
+                comment_deletion_response = requests.delete(comment_deletion_url, headers=Utils.canvas_api_headers())
+                if comment_deletion_response.status_code == 200:
+                    print('\tDeleted existing submission comment:', comment)
+                else:
+                    print('\tWARNING: unable to delete existing submission comment:', comment_deletion_response.text)
+
+    if skipped_comments > 0:
+        print('\tSkipped deletion of', skipped_comments, 'existing comments created by other users')
 
 submission_count = 0
 submission_total = len(filtered_submission_list)

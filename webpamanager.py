@@ -19,7 +19,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-05'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -312,7 +312,7 @@ for file in response_files:
             current_errors.append('Own name indicator missing')
         invalid_file = True
     if current_errors:
-        submission_errors[file.split('.')[0]] = current_errors
+        submission_errors[expected_rater] = current_errors
 
     if not invalid_file:
         if current_errors:
@@ -410,9 +410,13 @@ response_data.to_excel(writer, sheet_name='WebPA calculation')
 for row in writer.book.active.iter_rows(min_row=2, min_col=3, max_col=3):
     if not row[0].value:
         row[0].fill = openpyxl.styles.PatternFill(start_color='00FFC7CE', end_color='00FFC7CE', fill_type='solid')
-for row in writer.book.active.iter_rows(min_row=2, min_col=12, max_col=12):
-    if row[0].value == 'Y':
-        row[0].fill = openpyxl.styles.PatternFill(start_color='00FFB97F', end_color='00FFB97F', fill_type='solid')
+for row in writer.book.active.iter_rows(min_row=2, min_col=2, max_col=12):
+    if row[10].value == 'Y':
+        row[10].fill = openpyxl.styles.PatternFill(start_color='00FFB97F', end_color='00FFB97F', fill_type='solid')
+        for file in skipped_files:
+            if row[0].value == file.split('.')[0]:
+                print('WARNING: Respondent who submitted an invalid form had their mark adjusted:', row[0].value)
+                break
 
 if args.context_summaries:
     for row in writer.book.active.iter_rows(min_row=2, min_col=2, max_col=14):

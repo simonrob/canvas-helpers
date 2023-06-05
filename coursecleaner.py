@@ -5,7 +5,7 @@ easily delete some or all course content before starting again or importing from
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-05'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -25,6 +25,7 @@ parser.add_argument('--assignments', action='store_true', help='Delete all of a 
 parser.add_argument('--quizzes', action='store_true', help='Delete all of a course\'s quizzes')
 parser.add_argument('--discussions', action='store_true', help='Delete all of a course\'s discussions')
 parser.add_argument('--announcements', action='store_true', help='Delete all of a course\'s announcements')
+parser.add_argument('--events', action='store_true', help='Delete all of a course\'s events')
 parser.add_argument('--files', action='store_true', help='Delete all of a course\'s files and folders')
 args = parser.parse_args()  # exits if no course URL is provided
 
@@ -34,12 +35,16 @@ course_details_response = requests.get(COURSE_URL, headers=Utils.canvas_api_head
 if course_details_response.status_code != 200:
     print('ERROR: unable to retrieve course details; aborting')
     sys.exit()
-COURSE_NAME = course_details_response.json()['original_name']
+course_details_json = course_details_response.json()
+COURSE_ID = course_details_json['id']
+COURSE_CODE = course_details_json['course_code']
+COURSE_NAME = course_details_json['original_name']
 
 
 def confirm_deletion(type_hint):
     print()
-    if input('Confirm deleting ALL %s for course "%s"? (type yes or no) ' % (type_hint, COURSE_NAME)).lower() != 'yes':
+    if input('Confirm deleting ALL %s for course "%s: %s"? (type yes or no) ' % (
+            type_hint, COURSE_CODE, COURSE_NAME)).lower() != 'yes':
         sys.exit('ERROR: aborting deletion; confirmation refused')
 
 
@@ -159,6 +164,11 @@ if args.announcements or args.all:
     # announcements are retrieved via the discussions API with a special parameter
     delete_items(content_list_path='%s/discussion_topics' % COURSE_URL, type_hint='announcement',
                  params={'only_announcements': True})
+
+if args.events or args.all:
+    confirm_deletion(type_hint='events')
+    delete_items('%s/calendar_events' % COURSE_URL.split('/courses')[0], type_hint='event',
+                 params={'all_events': True, 'context_codes[]': ['course_%d' % COURSE_ID]})
 
 if args.files or args.all:
     confirm_deletion(type_hint='files')

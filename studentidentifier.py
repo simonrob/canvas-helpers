@@ -7,7 +7,7 @@ any existing data lost*) if it is present."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-05'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -19,16 +19,20 @@ from canvashelpers import Utils
 
 parser = argparse.ArgumentParser()
 parser.add_argument('url', nargs=1,
-                    help='Please pass the URL of the course to add a Student Number column for')
+                    help='Please pass the URL of the course to add an identifier column for')
 parser.add_argument('--individual-upload', action='store_true',
                     help='In some cases the default of bulk uploading custom Gradebook column data fails. Set this '
                          'option to try an alternative approach')
+parser.add_argument('--add-group-name', default=None,
+                    help='Add the name/number of a group that the student is part of (limit: one group set at once). '
+                         'To do this, please pass the URL of the groups page that shows the group set you wish to use '
+                         '(e.g., https://canvas.swansea.ac.uk/courses/[course-id]/groups#tab-[set-id])')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
 args = parser.parse_args()  # exits if no assignment URL is provided
 
 COURSE_URL = Utils.course_url_to_api(args.url[0])
-print('%screating Student Number column for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))
+print('%screating identifier column for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))
 
 # need to check existing columns - only one private ('teacher_notes') column is allowed per course
 # example: {'title': 'Notes', 'position': 1, 'teacher_notes': True, 'read_only': False, 'id': 100, 'hidden': False}
@@ -43,12 +47,45 @@ if custom_column_response.status_code == 200:
             print('Found existing private column "%s" (ID: %d) - replacing' % (
                 column['title'], existing_private_column_id))
 
+group_name_map = {}
+if args.add_group_name:
+    group_set_id = args.add_group_name.split('#tab-')[-1]
+    try:
+        group_set_id = int(group_set_id)
+    except ValueError:
+        print('ERROR: unable to get group set ID from given URL', args.add_group_name)
+        sys.exit()
+
+    api_root = COURSE_URL.split('/courses')[0]
+    group_set_response = Utils.canvas_multi_page_request('%s/group_categories/%d/groups' % (api_root, group_set_id),
+                                                         type_hint='group sets')
+    if not group_set_response:
+        print('ERROR: unable to load group sets; aborting')
+        sys.exit()
+
+    group_set_json = json.loads(group_set_response)
+    for group in group_set_json:
+        group_members_response = Utils.canvas_multi_page_request('%s/groups/%d/users' % (api_root, group['id']),
+                                                                 type_hint='group')
+        if not group_members_response:
+            print('WARNING: unable to load group members; skipping group', group)
+            continue
+
+        group_members_json = json.loads(group_members_response)
+        for member in group_members_json:
+            try:
+                user_id = int(member['login_id'])  # ignore non-students, who often have non-numeric IDs
+            except ValueError:
+                print('WARNING: skipping non-numeric group member', member['login_id'])
+                continue
+            group_name_map[user_id] = group['name']
+
 if args.dry_run:
     custom_column_id = -1
     print('DRY RUN: skipping custom column creation/replacement')
 else:
     new_column_data = {
-        'column[title]': 'Student Number',
+        'column[title]': 'Identifier',
         'column[position]': 1,
         'column[hidden]': False,
         'column[teacher_notes]': True,
@@ -78,6 +115,18 @@ if not course_user_response:
 
 course_user_json = json.loads(course_user_response)
 
+
+# add a group number where requested - separated for easier format customisation
+def get_column_content(user_identifier):
+    column_value = user_identifier
+    if args.add_group_name and user_identifier in group_name_map:
+        group_name = group_name_map[user_identifier]
+        if ' ' in group_name:
+            group_name = 'Gr: %s' % group_name.split(' ')[-1]  # use only the group number if possible (to fit column)
+        column_value = '%d (%s)' % (user_identifier, group_name)
+    return column_value
+
+
 # bulk upload - doesn't always work with every enrolment type; if that is the case we need the alternative below
 if not args.individual_upload:
     column_user_data = []
@@ -88,7 +137,8 @@ if not args.individual_upload:
             except ValueError:
                 print('WARNING: skipping non-numeric student login_id', user['login_id'])
                 continue
-            column_user_data.append({'column_id': custom_column_id, 'user_id': user['id'], 'content': user_id})
+            column_content = get_column_content(user_id)
+            column_user_data.append({'column_id': custom_column_id, 'user_id': user['id'], 'content': column_content})
 
     if args.dry_run:
         print('DRY RUN: would bulk upload', len(column_user_data), 'records')
@@ -112,16 +162,17 @@ for user in course_user_json:
         except ValueError:
             print('WARNING: skipping non-numeric student login_id', user['login_id'])
             continue
+        column_content = get_column_content(user_id)
 
         if args.dry_run:
-            print('DRY RUN: would set column', custom_column_id, 'for user', user['id'], 'to', user_id)
+            print('DRY RUN: would set column', custom_column_id, 'for user', user['id'], 'to', column_content)
             continue
 
         column_data_response = requests.put(
             '%s/custom_gradebook_columns/%d/data/%d' % (COURSE_URL, custom_column_id, user['id']),
-            data={'column_data[content]': user_id}, headers=Utils.canvas_api_headers())
+            data={'column_data[content]': column_content}, headers=Utils.canvas_api_headers())
 
         if column_data_response.status_code != 200:
             print('ERROR: unable to save custom column user data: ', column_data_response.text, '- skipping', user)
         else:
-            print('Successfully added student ID', user_id, 'for', user['name'], '(%d)' % user['id'])
+            print('Successfully added identifier', column_content, 'for', user['name'], '(%d)' % user['id'])

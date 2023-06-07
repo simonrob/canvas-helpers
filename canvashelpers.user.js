@@ -2,6 +2,8 @@
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
 // @version      2023-06-07
+// @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
+// @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @description  A UserScript to help make common Canvas tasks more manageable
 // @author       Simon Robinson
 // @match        http*://canvas.swansea.ac.uk/*

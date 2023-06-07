@@ -85,8 +85,8 @@ python -m pip install pandas
 
 
 ## JavaScript tools
-- [Canvas Helpers Userscript](canvashelpers.js): This UserScript can be used with an extension such as [TamperMonkey](https://www.tampermonkey.net/) to make various refinements to the Canvas web interface.
-Once you have installed TamperMonkey or similar, you can [add the script directly](https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.js).
+- [Canvas Helpers Userscript](canvashelpers.user.js): This UserScript can be used with an extension such as [TamperMonkey](https://www.tampermonkey.net/) to make various refinements to the Canvas web interface.
+Once you have installed TamperMonkey or similar, you can [add the script directly](https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js).
 Currently the script does the following:
 
   - Reduce the size of the homepage cards to allow more courses to be displayed at once

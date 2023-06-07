@@ -110,7 +110,7 @@ else:
     response_template_sheet.append(webpa_headers)
 initial_max_rows = response_template_sheet.max_row
 
-# load group details
+# load group details - note: this is a beta method, but is much faster than the iteration used in studentidentifier.py
 group_sets = {}
 csv_headers = None
 group_set_response = requests.get('https://canvas.swansea.ac.uk/api/v1/group_categories/%d/export' % GROUP_ID,

@@ -1,11 +1,29 @@
 # Canvas Helpers
-A collection of Python scripts to help make common [Canvas](https://www.instructure.com/canvas) tasks more manageable.
+A collection of Python and JavaScript utilities to help make common [Instructure Canvas](https://www.instructure.com/canvas) tasks more manageable.
 
-Begin by adding your Canvas API key in [canvashelpers.config](https://github.com/simonrob/canvas-helpers/blob/main/canvashelpers.config), then read the guides below to get started.
+Please feel free to [open an issue](https://github.com/simonrob/canvas-helpers/issues) with feedback or suggestions, or to report any problems.
+
+
+## Python tools
+The following Python scripts use the Canvas API to retrieve, manipulate or configure your Canvas courses and their data.
+
+Please note that it is possible to quickly make major (and in some cases irreversible) changes to your Canvas courses using these scripts.
+As a result, you use these tools at your own risk, and take full responsibility for any actions taken.
+Most scripts have a `--dry-run` option that is highly recommended to use for testing before committing to an action.
+
+The hope, however, is that you will find that going back what can be a tediously repetitive manual option in the web-based Canvas portal is inconceivable once you have set up a workflow that works for you.
+
+
+### Getting started
+Begin by cloning or downloading the contents of this repository, then installing the scripts' requirements via `python -m pip install -r requirements.txt` (see [below](https://github.com/simonrob/canvas-helpers#requirements) for further details and special cases).
+
+Next, obtain a Canvas API key from your account's Settings page and add this in [canvashelpers.config](https://github.com/simonrob/canvas-helpers/blob/main/canvashelpers.config).
+
+Once set up is complete, read the descriptions below to get started.
 Each script also has a `--help` option that provides further detail.
 
 
-## Scripts and functions
+### Scripts and capabilities
 - [Attachment file/comment/mark uploader](feedbackuploader.py): When assignment marks are processed outside of Canvas, they can already be uploaded in bulk from a spreadsheet using the existing tools (import/export grades).
 However, it is not possible to add comments or upload attachments in this way, which means a tiresomely repetitive task of attaching these documents one-by-one.
 This script allows you to upload a set of feedback attachments, grades and/or generic or individual text comments in bulk, and is compatible with both individual assignments and group-based ones.
@@ -53,17 +71,28 @@ This script allows you to easily delete some or all course content (e.g., pages,
 See `python coursecleaner.py --help` for further instructions.
 
 
-## Requirements
+### Requirements
 Python 3 is required to run all of these scripts.
 Most tools have a common set of dependencies, which can be installed from the project's requirements file:
 ```
 python -m pip install -r requirements.txt
 ```
 
-The [WebPA manager](webpamanager.py) script has an extra requirement:
+The [WebPA manager](webpamanager.py) script has an extra requirement that you can install manually:
 ```
 python -m pip install pandas
 ```
+
+
+## JavaScript tools
+- [Canvas Helpers Userscript](canvashelpers.js): This UserScript can be used with an extension such as [TamperMonkey](https://www.tampermonkey.net/) to make various refinements to the Canvas web interface.
+Once you have installed TamperMonkey or similar, you can [add the script directly](https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.js).
+Currently the script does the following:
+
+  - Reduce the size of the homepage cards to allow more courses to be displayed at once
+  - Sort groups by name/number in the assignment selection box
+  - Reduce extra spacing around list items in various places within courses
+
 
 
 ## Additional resources

@@ -4,9 +4,8 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
 
-import argparse
 import csv
 import json
 import mimetypes
@@ -16,11 +15,11 @@ import sys
 import openpyxl
 import requests
 
-from canvashelpers import Utils
+from canvashelpers import Args, Utils
 
-parser = argparse.ArgumentParser()
+parser = Args.ArgumentParser()
 parser.add_argument('url', nargs=1,
-                    help='Please pass the URL of the course whose students will be sent comments')
+                    help='Please provide the URL of the course whose students will be sent comments')
 parser.add_argument('--working-directory', default=None,
                     help='The root directory to use for the script\'s operation. Within this directory, attachments '
                          'and any `--comments-file` should be placed in a subfolder named as the course number (e.g., '
@@ -56,7 +55,7 @@ parser.add_argument('--delete-conversation-attachments', action='store_true',
                          'deleted, attachments are unavailable to both yourself *and* message recipients')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
-args = parser.parse_args()  # exits if no assignment URL is provided
+args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
 COURSE_URL = Utils.course_url_to_api(args.url[0])
 COURSE_ID = Utils.get_course_id(COURSE_URL)

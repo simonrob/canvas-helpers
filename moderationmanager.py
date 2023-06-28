@@ -24,9 +24,8 @@ Related tools:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
 
-import argparse
 import json
 import os
 import sys
@@ -35,10 +34,10 @@ import openpyxl.utils
 import openpyxl.worksheet.dimensions
 import requests
 
-from canvashelpers import Config, Utils
+from canvashelpers import Args, Config, Utils
 
-parser = argparse.ArgumentParser()
-parser.add_argument('url', nargs=1, help='Please pass the URL of the assignment to be moderated')
+parser = Args.ArgumentParser()
+parser.add_argument('url', nargs=1, help='Please provide the URL of the assignment to be moderated')
 parser.add_argument('--backup-file', required=True,
                     help='Moderation of marks involves irreversible changes, so we require backing up the current '
                          'marks and feedback to a spreadsheet. Use this parameter to provide the path to an XLSX file '
@@ -70,7 +69,7 @@ parser.add_argument('--mark-rounding', type=float, default=0.5,
                          '5 marks. Must be greater than 0')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
-args = parser.parse_args()  # exits if no assignment URL is provided
+args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
 
 def calculate_final_grade(grade_list):

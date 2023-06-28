@@ -3,14 +3,17 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
 
+import argparse
 import configparser
 import json
 import os
 import re
+import sys
 
 import requests.structures
+from yachalk import chalk
 
 
 class Config:
@@ -114,6 +117,10 @@ class Utils:
         a wrapper around Utils.canvas_multi_page_request, but is kept to separate the API parameter complexity from
         the scripts that use this method"""
         params = {'type[]': ['StudentViewEnrollment'] if not enrolment_types else enrolment_types}
+        if includes:
+            params['include[]'] = []
+            for param in includes:
+                params['include[]'].append(param)
         return Utils.canvas_multi_page_request('%s/enrollments' % course_url, params=params,
                                                type_hint='filtered course enrolments list')
 
@@ -240,3 +247,69 @@ class Utils:
 
         if student_number_or_group_name:
             marks_map[student_number_or_group_name] = marks_map_entry
+
+
+class Args:
+    # if default arguments are not provided, make argparse a little more interactive - added to help with demonstrations
+    # (a little like https://github.com/chriskiehl/Gooey, but still handled via the terminal)
+
+    class ArgumentParser(argparse.ArgumentParser):
+        def __init__(self, **kwargs):
+            new_kwargs = {k: v for k, v in kwargs.items() if k != 'add_help'}
+            super().__init__(add_help=False, **new_kwargs)
+
+        # ArgumentParser's exit_on_error parameter was only added in Python 3.9
+        def error(self, message):
+            if sys.stdout.isatty():
+                print(chalk.red('\nArgument error in %s – %s' % (os.path.basename(sys.argv[0]), message)))
+                print(chalk.yellow('\nEntering interactive mode; requesting parameters one-by-one...'))
+                return
+            super().error(message)
+
+    @staticmethod
+    def parse_args(parser, version):
+        parser.add_argument('--version', action='version', version='%s %s' % (os.path.basename(sys.argv[0]), version),
+                            help='Show the script\'s version string and exit')
+        parser.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+        args = parser.parse_args()
+
+        try:
+            # we have to use the parser's internal _actions object because there is no other way to get the help text
+            # noinspection PyProtectedMember
+            for action in parser._actions:
+                # noinspection PyProtectedMember,PyUnresolvedReferences
+                if type(action) in (argparse._HelpAction, argparse._VersionAction):
+                    continue
+
+                option_string = ', '.join(action.option_strings) if action.option_strings else action.dest
+                print()
+                print(chalk.green('Parameter:'), option_string)
+                print(chalk.green('Help:'), action.help)
+
+                # noinspection PyProtectedMember,PyUnresolvedReferences
+                if type(action) in (argparse._StoreTrueAction, argparse._StoreFalseAction):
+                    response = input(chalk.green('Enter y / yes to set to %s, or anything else to accept the default',
+                                                 '(%s): ') % (not action.default, action.default)).lower().strip()
+                    args.__dict__[action.dest] = action.default if response not in ('y', 'yes') else not action.default
+
+                else:
+                    # handle positional arguments (note: currently only supports one value regardless of nargs/repeats)
+                    optional_argument_types = (None, 0, '?')
+                    response = action.default
+                    while not response:
+                        required = action.nargs not in optional_argument_types
+                        response = input(chalk.green('Enter a value %s: ' %
+                                                     ('(required)' if required else 'or leave blank')))
+                        if not response and not required:
+                            response = None
+                            break
+                    args.__dict__[action.dest] = response if action.nargs in optional_argument_types else [response]
+
+                print(chalk.green('Outcome:'), option_string, 'is', args.__dict__[action.dest])
+
+            print()
+            return args
+
+        except KeyboardInterrupt:
+            print(chalk.yellow('\n\nInteractive mode interrupted; exiting\n'))
+            sys.exit()

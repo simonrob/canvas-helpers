@@ -7,19 +7,18 @@ any existing data lost*) if it is present."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-05'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
 
-import argparse
 import json
 import sys
 
 import requests
 
-from canvashelpers import Utils
+from canvashelpers import Args, Utils
 
-parser = argparse.ArgumentParser()
+parser = Args.ArgumentParser()
 parser.add_argument('url', nargs=1,
-                    help='Please pass the URL of the course to add an identifier column for')
+                    help='Please provide the URL of the course to add an identifier column for')
 parser.add_argument('--individual-upload', action='store_true',
                     help='In some cases the default of bulk uploading custom Gradebook column data fails. Set this '
                          'option to try an alternative approach')
@@ -29,7 +28,7 @@ parser.add_argument('--add-group-name', default=None,
                          '(e.g., https://canvas.swansea.ac.uk/courses/[course-id]/groups#tab-[set-id])')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
-args = parser.parse_args()  # exits if no assignment URL is provided
+args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
 COURSE_URL = Utils.course_url_to_api(args.url[0])
 print('%screating identifier column for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))

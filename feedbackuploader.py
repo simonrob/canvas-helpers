@@ -5,9 +5,8 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-05'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
 
-import argparse
 import csv
 import json
 import mimetypes
@@ -17,11 +16,11 @@ import sys
 import openpyxl
 import requests
 
-from canvashelpers import Config, Utils
+from canvashelpers import Args, Config, Utils
 
-parser = argparse.ArgumentParser()
+parser = Args.ArgumentParser()
 parser.add_argument('url', nargs=1,
-                    help='Please pass the URL of the assignment to bulk upload feedback attachments for')
+                    help='Please provide the URL of the assignment to bulk upload feedback attachments for')
 parser.add_argument('--working-directory', default=None,
                     help='The root directory to use for the script\'s operation. Within this directory, attachments '
                          'and any `--marks-file` should be placed in a subfolder named as the assignment number (e.g., '
@@ -78,7 +77,7 @@ parser.add_argument('--delete-existing', action='store_true',
                          'option does not change any marks that have been entered; only comments are removed.')
 parser.add_argument('--dry-run', action='store_true',
                     help='Preview the script\'s actions without actually making any changes. Highly recommended!')
-args = parser.parse_args()  # exits if no assignment URL is provided
+args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 assignment_id = Utils.get_assignment_id(ASSIGNMENT_URL)

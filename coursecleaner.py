@@ -5,29 +5,29 @@ easily delete some or all course content before starting again or importing from
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-05'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
 
-import argparse
 import json
 import sys
 
 import requests
 
-from canvashelpers import Utils
+from canvashelpers import Args, Utils
 
-parser = argparse.ArgumentParser()
-parser.add_argument('url', nargs=1, help='Please pass the URL of the course to be cleaned')
+parser = Args.ArgumentParser()
+parser.add_argument('url', nargs=1, help='Please provide the URL of the course to be cleaned')
 parser.add_argument('--all', action='store_true', help='Delete all of a course\'s content (equivalent to passing '
                                                        'every other available option)')
 parser.add_argument('--pages', action='store_true', help='Delete all of a course\'s pages (including the front page)')
 parser.add_argument('--modules', action='store_true', help='Delete all of a course\'s modules')
 parser.add_argument('--assignments', action='store_true', help='Delete all of a course\'s assignments')
+parser.add_argument('--rubrics', action='store_true', help='Delete all of a course\'s rubrics')
 parser.add_argument('--quizzes', action='store_true', help='Delete all of a course\'s quizzes')
 parser.add_argument('--discussions', action='store_true', help='Delete all of a course\'s discussions')
 parser.add_argument('--announcements', action='store_true', help='Delete all of a course\'s announcements')
 parser.add_argument('--events', action='store_true', help='Delete all of a course\'s events')
 parser.add_argument('--files', action='store_true', help='Delete all of a course\'s files and folders')
-args = parser.parse_args()  # exits if no course URL is provided
+args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
 COURSE_URL = Utils.course_url_to_api(args.url[0])
 
@@ -39,6 +39,9 @@ course_details_json = course_details_response.json()
 COURSE_ID = course_details_json['id']
 COURSE_CODE = course_details_json['course_code']
 COURSE_NAME = course_details_json['original_name']
+
+print('\nWARNING: this script allows you to delete *all* content from a Canvas course. It is highly recommended to',
+      'create a backup at %s/content_exports first' % COURSE_URL.replace('api/v1/', ''))
 
 
 def confirm_deletion(type_hint):
@@ -146,6 +149,10 @@ if args.assignments or args.all:
 
     # note: Canvas will auto-create a new assignment group to ensure at least one remains
     delete_items(content_list_path='%s/assignment_groups' % COURSE_URL, type_hint='assignment group')
+
+if args.rubrics or args.all:
+    confirm_deletion(type_hint='rubrics')
+    delete_items(content_list_path='%s/rubrics' % COURSE_URL, type_hint='rubric')
 
 if args.quizzes or args.all:
     confirm_deletion(type_hint='quizzes')

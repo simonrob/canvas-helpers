@@ -5,9 +5,8 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-05-26'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
 
-import argparse
 import csv
 import datetime
 import functools
@@ -19,12 +18,12 @@ import sys
 import openpyxl.utils
 import requests
 
-from canvashelpers import Config, Utils
+from canvashelpers import Args, Config, Utils
 
-parser = argparse.ArgumentParser()
+parser = Args.ArgumentParser()
 parser.add_argument('url', nargs=1,
-                    help='Please pass the URL of the assignment to download submissions for. Files will be saved in a '
-                         'folder named [assignment ID] (see the `--working-directory` option to configure this)')
+                    help='Please provide the URL of the assignment to download submissions for. Files will be saved in '
+                         'a folder named [assignment ID] (see the `--working-directory` option to configure this)')
 parser.add_argument('--working-directory', default=None,
                     help='The location to use for output (which will be created if it does not exist). '
                          'Default: the same directory as this script')
@@ -46,7 +45,7 @@ parser.add_argument('--multiple-attachments', action='store_true',
                          'submission, named as the student\'s number or the group\'s name. The original filename '
                          'will be used for each attachment that is downloaded. Without this option, any additional '
                          'attachments will be ignored, and only the first file found will be downloaded')
-args = parser.parse_args()  # exits if no assignment URL is provided
+args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 ASSIGNMENT_ID = Utils.get_assignment_id(ASSIGNMENT_URL)  # used only for output directory

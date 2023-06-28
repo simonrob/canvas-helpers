@@ -19,9 +19,8 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-05'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
 
-import argparse
 import csv
 import os
 import random
@@ -31,16 +30,17 @@ import tempfile
 
 import openpyxl.styles.differential
 import openpyxl.utils
-import pandas
+# noinspection PyPackageRequirements
+import pandas  # we don't list Pandas in requirements.txt to skip installing for other scripts (which do not require it)
 import requests
 
-from canvashelpers import Utils
+from canvashelpers import Args, Utils
 
 webpa_headers = ['Respondent', 'Person', 'Student №', 'Rating', 'Comments (optional)', 'Group №']
 
-parser = argparse.ArgumentParser()
+parser = Args.ArgumentParser()
 parser.add_argument('group', nargs=1,
-                    help='Please pass the URL of the groups page that shows the group set you wish to use for the '
+                    help='Please provide the URL of the groups page that shows the group set you wish to use for the '
                          'WebPA exercise (e.g., https://canvas.swansea.ac.uk/courses/[course-id]/groups#tab-[set-id])')
 parser.add_argument('--setup', action='store_true',
                     help='When set, the script will generate empty WebPA forms to be filled in by group members. If '
@@ -81,7 +81,7 @@ parser.add_argument('--working-directory', default=None,
                          'named as [student number].xlsx (missing files will be treated as non-respondents). In '
                          '`--setup` mode the set subfolder will be created by the script, and should not already '
                          'exist. Default: the same directory as this script')
-args = parser.parse_args()  # exits if no group URL is provided
+args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
 GROUP_ID = args.group[0].split('#tab-')[-1]
 try:

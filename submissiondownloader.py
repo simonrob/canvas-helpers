@@ -5,7 +5,7 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-07-11'  # ISO 8601 (YYYY-MM-DD)
 
 import csv
 import datetime
@@ -32,7 +32,6 @@ parser.add_argument('--speedgrader-file', default=None,
                          'students\' (or groups\') names, IDs (both Canvas and institutional) and a link to the '
                          'SpeedGrader page for the assignment, which is useful when marking activities such as '
                          'presentations or ad hoc tasks. No attachments are downloaded in this mode')
-parser.add_argument('--groups', action='store_true', help='Use this option if the assignment is completed in groups')
 parser.add_argument('--submitter-pattern', default=None,
                     help='Use this option to pass a (case-insensitive) regular expression pattern that will be used to '
                          'filter and select only submitters whose names *or* student numbers match. For example,'
@@ -58,6 +57,13 @@ if os.path.exists(OUTPUT_DIRECTORY):
     sys.exit()
 os.mkdir(OUTPUT_DIRECTORY)
 
+assignment_details_response = requests.get(ASSIGNMENT_URL, headers=Utils.canvas_api_headers())
+if assignment_details_response.status_code != 200:
+    print('ERROR: unable to get assignment details - did you set a valid Canvas API token in %s?' % Config.FILE_PATH)
+    sys.exit()
+GROUP_ASSIGNMENT = True if assignment_details_response.json()['group_category_id'] else False
+print('Retrieved assignment details - group assignment:', GROUP_ASSIGNMENT)
+
 speedgrader_file = None
 speedgrader_output = []
 if args.speedgrader_file and args.speedgrader_file.lower() in ['xlsx', 'csv']:
@@ -65,7 +71,7 @@ if args.speedgrader_file and args.speedgrader_file.lower() in ['xlsx', 'csv']:
     print('Creating a course roster file with SpeedGrader links from', args.url[0], 'at', speedgrader_file)
 else:
     output_format = '[student number].[uploaded file extension]'
-    if args.groups:
+    if GROUP_ASSIGNMENT:
         output_format = '[group name].[uploaded file extension]'
     if args.multiple_attachments:
         output_format = '[group name]/[original uploaded filename]'
@@ -77,7 +83,7 @@ if not submission_list_response:
     sys.exit()
 
 submission_list_json = json.loads(submission_list_response)
-filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, groups_mode=args.groups,
+filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, groups_mode=GROUP_ASSIGNMENT,
                                                                sort_entries=True)
 
 
@@ -88,8 +94,8 @@ def compare_attachment_dates(a1, a2):
 
 
 def filter_matched_submissions(single_submission):
-    submitter_details = Utils.get_submitter_details(single_submission, groups_mode=args.groups)
-    if args.groups:
+    submitter_details = Utils.get_submitter_details(single_submission, groups_mode=GROUP_ASSIGNMENT)
+    if GROUP_ASSIGNMENT:
         return submitter_matcher.match(submitter_details['group_name'])
     return submitter_matcher.match(submitter_details['student_number']) or submitter_matcher.match(
         submitter_details['student_name'])
@@ -107,7 +113,7 @@ download_count = 0
 download_total = len(filtered_submission_list)
 for submission in filtered_submission_list:
     download_count += 1
-    submitter = Utils.get_submitter_details(submission, groups_mode=args.groups)
+    submitter = Utils.get_submitter_details(submission, groups_mode=GROUP_ASSIGNMENT)
     if not submitter:
         print('ERROR: submitter details not found for submission; skipping:', submission)
         continue
@@ -116,7 +122,7 @@ for submission in filtered_submission_list:
         speedgrader_link = Utils.course_url_to_speedgrader(args.url[0], submitter['canvas_user_id'])
         if speedgrader_file.endswith('xlsx'):
             speedgrader_link = '=hyperlink("%s")' % speedgrader_link
-        if args.groups:
+        if GROUP_ASSIGNMENT:
             speedgrader_output.append([submitter['group_name'], submitter['canvas_group_id'], speedgrader_link])
         else:
             speedgrader_output.append(
@@ -127,7 +133,7 @@ for submission in filtered_submission_list:
         submission_output_directory = OUTPUT_DIRECTORY
         if args.multiple_attachments:
             submission_output_directory = os.path.join(
-                OUTPUT_DIRECTORY, submitter['group_name' if args.groups else 'student_number'])
+                OUTPUT_DIRECTORY, submitter['group_name' if GROUP_ASSIGNMENT else 'student_number'])
             if os.path.exists(submission_output_directory):
                 print('ERROR: output directory', submission_output_directory,
                       'already exists - please remove or rename the root assignment output folder')
@@ -143,7 +149,7 @@ for submission in filtered_submission_list:
                     output_filename = os.path.join(submission_output_directory, document['filename'])
                 else:
                     output_filename = os.path.join(submission_output_directory, '%s.%s' % (
-                        submitter['group_name' if args.groups else 'student_number'],
+                        submitter['group_name' if GROUP_ASSIGNMENT else 'student_number'],
                         document['filename'].split('.')[-1].lower()))
 
                 with open(output_filename, 'wb') as output_file:
@@ -165,7 +171,7 @@ for submission in filtered_submission_list:
         print('ERROR: unable to locate attachment for submission from', submitter, '- skipping')
 
 if speedgrader_file:
-    if args.groups:
+    if GROUP_ASSIGNMENT:
         spreadsheet_headers = ['Group name', 'Canvas group ID', 'Speedgrader link']
     else:
         spreadsheet_headers = ['Student number', 'Student name', 'Canvas user ID', 'Speedgrader link']

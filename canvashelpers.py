@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-07-11'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import configparser
@@ -192,8 +192,11 @@ class Utils:
         submitter = None
         if groups_mode:
             if 'group' in submission:
-                submitter = {'canvas_user_id': submission['user_id'], 'student_number': submission['user']['login_id'],
-                             'canvas_group_id': submission['group']['id'], 'group_name': submission['group']['name']}
+                submitter = {'canvas_user_id': submission['user_id'], 'canvas_group_id': submission['group']['id'],
+                             'group_name': submission['group']['name']}
+                if 'login_id' in submission['user']:
+                    # login_id is not always present (perhaps linked to individual marks in group assignments)
+                    submitter['student_number'] = submission['user']['login_id']
         elif 'user' in submission:
             submitter = {'canvas_user_id': submission['user_id'], 'student_number': submission['user']['login_id'],
                          'student_name': submission['user']['name']}
@@ -256,11 +259,13 @@ class Args:
     class ArgumentParser(argparse.ArgumentParser):
         def __init__(self, **kwargs):
             new_kwargs = {k: v for k, v in kwargs.items() if k != 'add_help'}
+            self.original_error = None
             super().__init__(add_help=False, **new_kwargs)
 
         # ArgumentParser's exit_on_error parameter was only added in Python 3.9
         def error(self, message):
             if sys.stdout.isatty():
+                self.original_error = message
                 print(chalk.red('\nArgument error in %s – %s' % (os.path.basename(sys.argv[0]), message)))
                 print(chalk.yellow('\nEntering interactive mode; requesting parameters one-by-one...'))
                 return
@@ -272,6 +277,8 @@ class Args:
                             help='Show the script\'s version string and exit')
         parser.add_argument('-h', '--help', action='help', help='Show this help message and exit')
         args = parser.parse_args()
+        if not parser.original_error:
+            return args
 
         try:
             # we have to use the parser's internal _actions object because there is no other way to get the help text

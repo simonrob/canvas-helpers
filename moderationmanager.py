@@ -24,8 +24,9 @@ Related tools:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 
+import argparse
 import json
 import os
 import sys
@@ -36,40 +37,44 @@ import requests
 
 from canvashelpers import Args, Config, Utils
 
-parser = Args.ArgumentParser()
-parser.add_argument('url', nargs=1, help='Please provide the URL of the assignment to be moderated')
-parser.add_argument('--backup-file', required=True,
-                    help='Moderation of marks involves irreversible changes, so we require backing up the current '
-                         'marks and feedback to a spreadsheet. Use this parameter to provide the path to an XLSX file '
-                         'to use for this purpose (which will be overwritten if it exists)')
-parser.add_argument('--include-unsubmitted', action='store_true',
-                    help='Students who have not made a submission for the assignment are skipped by default. Set this '
-                         'option if you want to include these students (for example, when no submission is actually '
-                         'expected, and the Canvas assignment is used solely to record marks). Please note that this '
-                         'will include any staff enrolled as students, but not the inbuilt test student')
-parser.add_argument('--minimum-markers', type=int, default=2,  # TODO: get this from the assignment?
-                    help='It can be helpful to run this script to review grading outcomes before all marking has been '
-                         'completed. Use this parameter to set a minimum threshold for the number of individual marks '
-                         'received for each submission (i.e., number of markers) in order to calculate a final grade. '
-                         'The script will not finalise and release grades unless *all* submissions meet this threshold')
-parser.add_argument('--identify-rubric-markers', action='store_true',
-                    help='When the collated marks are released by this script, they will show as being created by the '
-                         'assignment moderator. There is no way to avoid this, but if needed, set this option, and '
-                         'when using a rubric the script will add individual markers\' names alongside their scores '
-                         'and feedback')
-parser.add_argument('--moderator-marking', action='store_true',
-                    help='The default assumption (by Canvas\'s designers) is that moderators do not mark, but simply '
-                         'review marks and feedback entered by others, then select or enter a final grade. If you (the '
-                         'moderator) are also a marker, set this option so that the script knows to treat your marks '
-                         'as equal to any others, averaging them in the same way. Without this option, the script will '
-                         'combine all markers\' feedback, but treat any mark you yourself give as the final grade, '
-                         'overriding any other that are present (and the `--minimum-markers` threshold)')
-parser.add_argument('--mark-rounding', type=float, default=0.5,
-                    help='A fractional value to be used for rounding final marks. For example, 5 rounds to the nearest '
-                         '5 marks. Must be greater than 0')
-parser.add_argument('--dry-run', action='store_true',
-                    help='Preview the script\'s actions without actually making any changes. Highly recommended!')
-args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('url', nargs=1, help='Please provide the URL of the assignment to be moderated')
+    parser.add_argument('--backup-file', required=True,
+                        help='Moderation of marks involves irreversible changes, so we require backing up the current '
+                             'marks and feedback to a spreadsheet. Use this parameter to provide the path to an XLSX '
+                             'file to use for this purpose (which will be overwritten if it exists)')
+    parser.add_argument('--include-unsubmitted', action='store_true',
+                        help='Students who have not made a submission for the assignment are skipped by default. Set '
+                             'this option if you want to include these students (for example, when no submission is '
+                             'actually expected, and the Canvas assignment is used solely to record marks). Please '
+                             'note this will include any staff enrolled as students (but not the inbuilt test student)')
+    parser.add_argument('--minimum-markers', type=int, default=2,  # TODO: get this from the assignment?
+                        help='It can be helpful to run this script to review grading outcomes before all marking has '
+                             'been completed. Use this parameter to set a minimum threshold for the number of '
+                             'individual marks received for each submission (i.e., number of markers) in order to '
+                             'calculate a final grade. The script will not finalise and release grades unless *all* '
+                             'submissions meet this threshold')
+    parser.add_argument('--identify-rubric-markers', action='store_true',
+                        help='When the collated marks are released by this script, they will show as being created by '
+                             'the assignment moderator. There is no way to avoid this, but if needed, set this option, '
+                             'and when using a rubric the script will add individual markers\' names alongside their '
+                             'scores and feedback')
+    parser.add_argument('--moderator-marking', action='store_true',
+                        help='The default assumption (by Canvas\'s designers) is that moderators do not mark, but '
+                             'simply review marks and feedback entered by others, then select or enter a final grade. '
+                             'If you (the moderator) are also a marker, set this option so that the script knows to '
+                             'treat your marks as equal to any others, averaging them in the same way. Without this '
+                             'option, the script will combine all markers\' feedback, but treat any mark you yourself '
+                             'give as the final grade, overriding any other that are present (and the '
+                             '`--minimum-markers` threshold)')
+    parser.add_argument('--mark-rounding', type=float, default=0.5,
+                        help='A fractional value to be used for rounding final marks. For example, 5 rounds to the '
+                             'nearest 5 marks. Must be greater than 0')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Preview the script\'s actions without actually making any changes. Highly recommended!')
+    return parser.parse_args()
 
 
 def calculate_final_grade(grade_list):
@@ -82,6 +87,7 @@ def calculate_final_grade(grade_list):
     return average_grade
 
 
+args = Args.interactive(get_args)
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 ASSIGNMENT_ID = Utils.get_assignment_id(ASSIGNMENT_URL)
 API_ROOT = ASSIGNMENT_URL.split('/assignments')[0]

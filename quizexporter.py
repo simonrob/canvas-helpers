@@ -8,8 +8,9 @@ limitation, exporting all responses to a single spreadsheet."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 
+import argparse
 import json
 import os
 import re
@@ -20,16 +21,20 @@ import requests.structures
 
 from canvashelpers import Args, Config, Utils
 
-parser = Args.ArgumentParser()
-parser.add_argument('url', nargs=1,
-                    help='Please provide the URL of the assignment to retrieve quiz responses for. Output will be '
-                         'saved as [assignment ID].xlsx')
-parser.add_argument('--working-directory', default=None,
-                    help='The location to use for output (which will be created if it does not exist). '
-                         'Default: the same directory as this script')
-parser.add_argument('--overwrite', action='store_true', help='Overwrite any existing output file')
-args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('url', nargs=1,
+                        help='Please provide the URL of the assignment to retrieve quiz responses for. Output will be '
+                             'saved as [assignment ID].xlsx')
+    parser.add_argument('--working-directory', default=None,
+                        help='The location to use for output (which will be created if it does not exist). '
+                             'Default: the same directory as this script')
+    parser.add_argument('--overwrite', action='store_true', help='Overwrite any existing output file')
+    return parser.parse_args()
+
+
+args = Args.interactive(get_args)
 config_settings = Config.get_settings()
 LTI_INSTITUTION_SUBDOMAIN = config_settings['lti_institution_subdomain']
 LTI_BEARER_TOKEN = config_settings['lti_bearer_token']

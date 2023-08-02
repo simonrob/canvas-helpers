@@ -5,8 +5,9 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 
+import argparse
 import csv
 import json
 import mimetypes
@@ -16,69 +17,78 @@ import sys
 import openpyxl
 import requests
 
+
 from canvashelpers import Args, Config, Utils
 
-parser = Args.ArgumentParser()
-parser.add_argument('url', nargs=1,
-                    help='Please provide the URL of the assignment to bulk upload feedback attachments for')
-parser.add_argument('--working-directory', default=None,
-                    help='The root directory to use for the script\'s operation. Within this directory, attachments '
-                         'and any `--marks-file` should be placed in a subfolder named as the assignment number (e.g., '
-                         'for an assignment at https://[canvas-domain]/courses/10000/assignments/123456, name the '
-                         'subfolder 123456). Default: the same directory as this script')
-parser.add_argument('--attachment-extension', default='pdf',
-                    help='The file extension of the attachments to upload (without the dot separator). Attachments '
-                         'should be named following the format [student number].[extension] (or, in group mode, '
-                         '[group name].[extension]. Multiple attachments can be added by running the script '
-                         'repeatedly. Default: \'pdf\'')
-parser.add_argument('--attachment-mime-type', default=None,
-                    help='Canvas requires a hint about the MIME type of the attachment file you are uploading. The '
-                         'script is able to guess the correct value in most cases, but if you are uploading a file '
-                         'with an unusual extension or format then you can specify a value here')
-parser.add_argument('--marks-file', default=None,
-                    help='An XLSX or CSV file containing a minimum of two columns: student number and mark (in that '
-                         'order). A third column can be added for per-student feedback that will be added as a text '
-                         'comment, overriding the global `--attachment-comment`. To add a comment but not a mark, set '
-                         'a negative mark (e.g., -1). Please note that unless `--marks-as-percentage` is set, the mark '
-                         'must be on the same scale as that of the assignment itself. The script tries to validate '
-                         'this, but is not always able to do so if marks are low')
-parser.add_argument('--marks-as-percentage', action='store_true',
-                    help='Set this parameter if your `--marks-file` marks are provided as a percentage, rather than on '
-                         'the same scale as the marks available for the assignment itself')
-parser.add_argument('--attachment-comment', default='See attached file',
-                    help='The comment to add when attaching the feedback file. Overridden by any individual comments '
-                         'in the imported marks file. The default value (\'See attached file\') will be skipped if '
-                         'there is no attachment, but in all other cases the comment will be added regardless')
-parser.add_argument('--groups', action='store_true',
-                    help='Use this option if the assignment is completed in groups and all members should receive the '
-                         'same mark and feedback. If you use this option, group names must be used instead of student '
-                         'numbers in both the feedback filenames and any `--marks-file` attachment, and these must be '
-                         'exactly as specified on Canvas. For example, if you have a Canvas group called \'Group 1\', '
-                         'name the attachment file \'Group 1.pdf\'; (\'1.pdf\' will not work)')
-parser.add_argument('--groups-individual', action='store_true',
-                    help='Use this option *in addition* to `--groups` if the assignment is completed in groups but it '
-                         'is configured to give group members marks and feedback individually. The script will first '
-                         'look for attachments or `--marks-file` entries named after the group (for cases where all '
-                         'members should receive the same feedback). If these items are not found, the script will '
-                         'then look for attachments or `--marks-file` entries named after student numbers (for cases '
-                         'when individual feedback is needed). These approaches can be mixed if needed (e.g., a '
-                         'group-named attachment but individual marks and/or feedback comments).')
-parser.add_argument('--include-unsubmitted', action='store_true',
-                    help='Students who have not made a submission for the assignment are skipped by default. Set this '
-                         'option if you want to include these students (for example, when no submission is actually '
-                         'expected, and the Canvas assignment is used solely to record marks). Note that when not in '
-                         '`--groups` mode this will include any staff enrolled as students (though not the inbuilt '
-                         'test student), but this should not be an issue as no mark, comment or attachment will be '
-                         'available for them')
-parser.add_argument('--delete-existing', action='store_true',
-                    help='Delete all existing comments created by your Canvas user before adding any new feedback '
-                         '(removing both manually-created comments and ones added via API scripts such as this one). '
-                         'If comments have attachments, the attachments will also become inaccessible. Note that this '
-                         'option does not change any marks that have been entered; only comments are removed.')
-parser.add_argument('--dry-run', action='store_true',
-                    help='Preview the script\'s actions without actually making any changes. Highly recommended!')
-args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
+DEFAULT_COMMENT = 'See attached file'
 
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('url', nargs=1,
+                        help='Please provide the URL of the assignment to bulk upload feedback attachments for')
+    parser.add_argument('--working-directory', default=None,
+                        help='The root directory to use for the script\'s operation. Within this directory, '
+                             'attachments and any `--marks-file` should be placed in a subfolder named as the '
+                             'assignment number (e.g., for an assignment at https://[canvas-domain]/courses/10000/assi'
+                             'gnments/123456, name the subfolder 123456). Default: the same directory as this script')
+    parser.add_argument('--attachment-extension', default='pdf',
+                        help='The file extension of the attachments to upload (without the dot separator). Attachments '
+                             'should be named following the format [student number].[extension] (or, in group mode, '
+                             '[group name].[extension]. Multiple attachments can be added by running the script '
+                             'repeatedly. Default: \'pdf\'')
+    parser.add_argument('--attachment-mime-type', default=None,
+                        help='Canvas requires a hint about the MIME type of the attachment file you are uploading. The '
+                             'script is able to guess the correct value in most cases, but if you are uploading a file '
+                             'with an unusual extension or format then you can specify a value here')
+    parser.add_argument('--marks-file', default=None,
+                        help='The name of an XLSX or CSV file located in `--working-directory` containing a minimum of '
+                             'two columns: student number and mark (in that order). A third column can be added for '
+                             'per-student feedback that will be added as a text comment, overriding the global '
+                             '`--attachment-comment`. To add a comment but not a mark, set a negative mark (e.g., -1). '
+                             'Please note that unless `--marks-as-percentage` is set, the mark must be on the same '
+                             'scale as that of the assignment itself. The script tries to validate this, but is not '
+                             'always able to do so if marks are low')
+    parser.add_argument('--marks-as-percentage', action='store_true',
+                        help='Set this parameter if your `--marks-file` marks are provided as a percentage, rather '
+                             'than on the same scale as the marks available for the assignment itself')
+    parser.add_argument('--attachment-comment', default=DEFAULT_COMMENT,
+                        help='The comment to add when attaching the feedback file. Overridden by any individual '
+                             'comments in the imported marks file. The default value (\'%s\') will be skipped if there '
+                             'is no attachment, but in all other cases the comment will be added regardless' %
+                             DEFAULT_COMMENT)
+    parser.add_argument('--groups', action='store_true',
+                        help='Use this option if the assignment is completed in groups and all members should receive '
+                             'the same mark and feedback. If you use this option, group names must be used instead of '
+                             'student numbers in both the feedback filenames and any `--marks-file` attachment, and '
+                             'these must be exactly as specified on Canvas. For example, if you have a Canvas group '
+                             'called \'Group 1\', name the attachment file \'Group 1.pdf\'; (\'1.pdf\' will not work)')
+    parser.add_argument('--groups-individual', action='store_true',
+                        help='Use this option *in addition* to `--groups` if the assignment is completed in groups but '
+                             'it is configured to give group members marks and feedback individually. The script will '
+                             'first look for attachments or `--marks-file` entries named after the group (for cases '
+                             'where all members should receive the same feedback). If these items are not found, the '
+                             'script will then look for attachments or `--marks-file` entries named after student '
+                             'numbers (for cases when individual feedback is needed). These approaches can be mixed if '
+                             'needed (e.g., a group-named attachment but individual marks and/or feedback comments).')
+    parser.add_argument('--include-unsubmitted', action='store_true',
+                        help='Students who have not made a submission for the assignment are skipped by default. Set '
+                             'this option if you want to include these students (for example, when no submission is '
+                             'actually expected, and the Canvas assignment is used solely to record marks). Note that '
+                             'when not in `--groups` mode this will include any staff enrolled as students (though not '
+                             'the inbuilt test student), but this should not be an issue as no mark, comment or '
+                             'attachment will be available for them')
+    parser.add_argument('--delete-existing', action='store_true',
+                        help='Delete all existing comments created by your Canvas user before adding any new feedback '
+                             '(removing both manually-created comments and ones added via API scripts such as this '
+                             'one). If comments have attachments, the attachments will also become inaccessible. Note '
+                             'that this option does not change any entered marks; only comments are removed.')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Preview the script\'s actions without actually making any changes. Highly recommended!')
+    return parser.parse_args()
+
+
+args = Args.interactive(get_args)
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 assignment_id = Utils.get_assignment_id(ASSIGNMENT_URL)
 INPUT_DIRECTORY = os.path.join(
@@ -238,7 +248,7 @@ for submission in filtered_submission_list:
     if attachment_comment != args.attachment_comment:
         print('Adding submission comment from spreadsheet:', attachment_comment.replace('\n', '\\n'))
     else:
-        if attachment_file is None and attachment_comment == parser.get_default('attachment_comment'):
+        if attachment_file is None and attachment_comment == DEFAULT_COMMENT:
             print('Skipping default comment \'%s\' as no attachment is provided' % attachment_comment)
             del comment_association_data['comment[text_comment]']
         else:

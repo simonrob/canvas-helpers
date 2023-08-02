@@ -19,8 +19,9 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 
+import argparse
 import csv
 import os
 import random
@@ -38,51 +39,56 @@ from canvashelpers import Args, Utils
 
 webpa_headers = ['Respondent', 'Person', 'Student №', 'Rating', 'Comments (optional)', 'Group №']
 
-parser = Args.ArgumentParser()
-parser.add_argument('group', nargs=1,
-                    help='Please provide the URL of the groups page that shows the group set you wish to use for the '
-                         'WebPA exercise (e.g., https://canvas.swansea.ac.uk/courses/[course-id]/groups#tab-[set-id])')
-parser.add_argument('--setup', action='store_true',
-                    help='When set, the script will generate empty WebPA forms to be filled in by group members. If '
-                         'not set, the script will look for group members\' responses to process (searching in '
-                         '`--working-directory`)')
-parser.add_argument('--setup-template', default=None,
-                    help='When in `--setup` mode, an Excel template file to be used to create group members\' rating '
-                         'forms. Useful if you would like to add instructions or other content to the forms each group '
-                         'member completes. The template should already contain the response column headers %s as its '
-                         'last row. If this parameter is not set, a new spreadsheet will be created with these column '
-                         'headers.' % webpa_headers)
-parser.add_argument('--setup-group-output', action='store_true',
-                    help='When in `--setup` mode, whether to generate a customised WebPA response form for each '
-                         'student number in the group (default); or, if set, one generic spreadsheet per group')
-parser.add_argument('--setup-test', action='store_true',
-                    help='When set, the script will insert random responses into the generated WebPA forms')
-parser.add_argument('--marks-file', required='--setup' not in ''.join(sys.argv),
-                    help='An XLSX or CSV file containing a minimum of two columns: student number (or group name) and '
-                         'mark, in that order. Only applies when not in `--setup` mode')
-parser.add_argument('--minimum-variance', type=float, default=0.2,
-                    help='The minimum WebPA variance level at which contribution ratings will be used to adjust marks. '
-                         'Only applies when not in `--setup` mode. Default: 0.2')
-parser.add_argument('--mark-rounding', type=float, default=0.5,
-                    help='A fractional value to be used for rounding marks. For example, 5 rounds to the nearest 5 '
-                         'marks. Must be greater than 0. Only applies when not in `--setup` mode. Default: 0.5')
-parser.add_argument('--maximum-mark', type=float, default=100,
-                    help='The maximum possible mark for the assignment that this exercise is being applied to, used to '
-                         'cap adjusted marks. Only applies when not in `--setup` mode. Default: 100')
-parser.add_argument('--context-summaries', action='store_true',
-                    help='If set, the script will add two columns to the results spreadsheet: `Errors` summarises '
-                         'processing issues when forms were submitted but found to be invalid, and `Comment` provides '
-                         'a ready-made summary of the submission that can be provided to each submitting student. Only '
-                         'applies when not in `--setup` mode')
-parser.add_argument('--working-directory', default=None,
-                    help='The location to use for processing and output. The script will work in a subfolder of this '
-                         'directory that is named as the Canvas group set ID. When `--setup` is not specified, this '
-                         'subfolder is assumed to contain the individual student responses to the WebPA exercise, '
-                         'named as [student number].xlsx (missing files will be treated as non-respondents). In '
-                         '`--setup` mode the set subfolder will be created by the script, and should not already '
-                         'exist. Default: the same directory as this script')
-args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('group', nargs=1,
+                        help='Please provide the URL of the groups page that shows the group set you wish to use for '
+                             'the WebPA exercise (e.g., https://canvas.swansea.ac.uk/courses/[course-id]/groups#tab-'
+                             '[set-id])')
+    parser.add_argument('--setup', action='store_true',
+                        help='When set, the script will generate empty WebPA forms to be filled in by group members. '
+                             'If not set, the script will look for group members\' responses to process (searching in '
+                             '`--working-directory`)')
+    parser.add_argument('--setup-template', default=None,
+                        help='When in `--setup` mode, an Excel template file to be used to create group members\' '
+                             'rating forms. Useful if you would like to add instructions or other content to the forms '
+                             'each group member completes. The template should already contain the response column '
+                             'headers %s as its last row. If this parameter is not set, a new spreadsheet will be '
+                             'created with these column headers.' % webpa_headers)
+    parser.add_argument('--setup-group-output', action='store_true',
+                        help='When in `--setup` mode, whether to generate a customised WebPA response form for each '
+                             'student number in the group (default); or, if set, one generic spreadsheet per group')
+    parser.add_argument('--setup-test', action='store_true',
+                        help='When set, the script will insert random responses into the generated WebPA forms')
+    parser.add_argument('--marks-file', required='--setup' not in ''.join(sys.argv),
+                        help='An XLSX or CSV file containing a minimum of two columns: student number (or group name) '
+                             'and mark, in that order. Only applies when not in `--setup` mode')
+    parser.add_argument('--minimum-variance', type=float, default=0.2,
+                        help='The minimum WebPA variance level at which contribution ratings will be used to adjust '
+                             'marks. Only applies when not in `--setup` mode. Default: 0.2')
+    parser.add_argument('--mark-rounding', type=float, default=0.5,
+                        help='A fractional value to be used for rounding marks. For example, 5 rounds to the nearest 5 '
+                             'marks. Must be greater than 0. Only applies when not in `--setup` mode. Default: 0.5')
+    parser.add_argument('--maximum-mark', type=float, default=100,
+                        help='The maximum possible mark for the assignment that this exercise is being applied to, '
+                             'used to cap adjusted marks. Only applies when not in `--setup` mode. Default: 100')
+    parser.add_argument('--context-summaries', action='store_true',
+                        help='If set, the script will add two columns to the results spreadsheet: `Errors` summarises '
+                             'processing issues when forms were submitted but found to be invalid, and `Comment` '
+                             'provides a ready-made summary of the submission that can be provided to each submitting '
+                             'student. Only applies when not in `--setup` mode')
+    parser.add_argument('--working-directory', default=None,
+                        help='The location to use for processing and output. The script will work in a subfolder of '
+                             'this directory that is named as the Canvas group set ID. When `--setup` is not '
+                             'specified, this subfolder is assumed to contain the individual student responses to the '
+                             'WebPA exercise, named as [student number].xlsx (missing files will be treated as non-'
+                             'respondents). In `--setup` mode the set subfolder will be created by the script, and '
+                             'should not already exist. Default: the same directory as this script')
+    return parser.parse_args()
+
+
+args = Args.interactive(get_args)
 GROUP_ID = args.group[0].split('#tab-')[-1]
 try:
     GROUP_ID = int(GROUP_ID)

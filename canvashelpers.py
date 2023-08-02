@@ -3,9 +3,8 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-07-11'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 
-import argparse
 import configparser
 import json
 import os
@@ -13,7 +12,6 @@ import re
 import sys
 
 import requests.structures
-from yachalk import chalk
 
 
 class Config:
@@ -253,70 +251,43 @@ class Utils:
 
 
 class Args:
-    # if default arguments are not provided, make argparse a little more interactive - added to help with demonstrations
-    # (a little like https://github.com/chriskiehl/Gooey, but still handled via the terminal)
-
-    class ArgumentParser(argparse.ArgumentParser):
-        def __init__(self, **kwargs):
-            new_kwargs = {k: v for k, v in kwargs.items() if k != 'add_help'}
-            self.original_error = None
-            super().__init__(add_help=False, **new_kwargs)
-
-        # ArgumentParser's exit_on_error parameter was only added in Python 3.9
-        def error(self, message):
-            if sys.stdout.isatty():
-                self.original_error = message
-                print(chalk.red('\nArgument error in %s – %s' % (os.path.basename(sys.argv[0]), message)))
-                print(chalk.yellow('\nEntering interactive mode; requesting parameters one-by-one...'))
-                return
-            super().error(message)
-
     @staticmethod
-    def parse_args(parser, version):
-        parser.add_argument('--version', action='version', version='%s %s' % (os.path.basename(sys.argv[0]), version),
-                            help='Show the script\'s version string and exit')
-        parser.add_argument('-h', '--help', action='help', help='Show this help message and exit')
-        args = parser.parse_args()
-        if not parser.original_error:
-            return args
-
+    def interactive(f):
+        """This rather complicated setup is to allow usage of both Tooey and Gooey at the same time when it is possible
+        that one, both or neither are available to import"""
+        tooey_ignore = '--ignore-tooey'
+        gooey_ignore = '--ignore-gooey'
+        has_gooey = False
+        using_gooey = False
         try:
-            # we have to use the parser's internal _actions object because there is no other way to get the help text
-            # noinspection PyProtectedMember
-            for action in parser._actions:
-                # noinspection PyProtectedMember,PyUnresolvedReferences
-                if type(action) in (argparse._HelpAction, argparse._VersionAction):
-                    continue
+            # noinspection PyPackageRequirements,PyUnresolvedReferences
+            import gooey
+            has_gooey = True
+            if gooey_ignore not in sys.argv:
+                using_gooey = True
+                return gooey.Gooey(f)()
+        except ImportError:
+            pass
 
-                option_string = ', '.join(action.option_strings) if action.option_strings else action.dest
-                print()
-                print(chalk.green('Parameter:'), option_string)
-                print(chalk.green('Help:'), action.help)
+        if not using_gooey:
+            try:
+                # noinspection PyPackageRequirements,PyUnresolvedReferences
+                import tooey
+                if tooey_ignore not in sys.argv:
+                    if gooey_ignore in sys.argv:
+                        sys.argv.remove(gooey_ignore)
+                    return tooey.Tooey(f)()
+            except ImportError:
+                pass
 
-                # noinspection PyProtectedMember,PyUnresolvedReferences
-                if type(action) in (argparse._StoreTrueAction, argparse._StoreFalseAction):
-                    response = input(chalk.green('Enter y / yes to set to %s, or anything else to accept the default',
-                                                 '(%s): ') % (not action.default, action.default)).lower().strip()
-                    args.__dict__[action.dest] = action.default if response not in ('y', 'yes') else not action.default
+        if tooey_ignore in sys.argv:
+            sys.argv.remove(tooey_ignore)
 
-                else:
-                    # handle positional arguments (note: currently only supports one value regardless of nargs/repeats)
-                    optional_argument_types = (None, 0, '?')
-                    response = action.default
-                    while not response:
-                        required = action.nargs not in optional_argument_types
-                        response = input(chalk.green('Enter a value %s: ' %
-                                                     ('(required)' if required else 'or leave blank')))
-                        if not response and not required:
-                            response = None
-                            break
-                    args.__dict__[action.dest] = response if action.nargs in optional_argument_types else [response]
-
-                print(chalk.green('Outcome:'), option_string, 'is', args.__dict__[action.dest])
-
-            print()
-            return args
-
-        except KeyboardInterrupt:
-            print(chalk.yellow('\n\nInteractive mode interrupted; exiting\n'))
-            sys.exit()
+        if has_gooey:
+            # a successful run with Gooey calls the program again with the actual arguments plus `--ignore-gooey`
+            # noinspection PyUnboundLocalVariable
+            return gooey.Gooey(f)()
+        else:
+            if gooey_ignore in sys.argv:
+                sys.argv.remove(gooey_ignore)
+            return f()

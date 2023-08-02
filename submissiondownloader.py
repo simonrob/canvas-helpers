@@ -5,8 +5,9 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-07-11'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 
+import argparse
 import csv
 import datetime
 import functools
@@ -20,32 +21,37 @@ import requests
 
 from canvashelpers import Args, Config, Utils
 
-parser = Args.ArgumentParser()
-parser.add_argument('url', nargs=1,
-                    help='Please provide the URL of the assignment to download submissions for. Files will be saved in '
-                         'a folder named [assignment ID] (see the `--working-directory` option to configure this)')
-parser.add_argument('--working-directory', default=None,
-                    help='The location to use for output (which will be created if it does not exist). '
-                         'Default: the same directory as this script')
-parser.add_argument('--speedgrader-file', default=None,
-                    help='Set this option to `XLSX` or `CSV` to create a file in the specified format containing '
-                         'students\' (or groups\') names, IDs (both Canvas and institutional) and a link to the '
-                         'SpeedGrader page for the assignment, which is useful when marking activities such as '
-                         'presentations or ad hoc tasks. No attachments are downloaded in this mode')
-parser.add_argument('--submitter-pattern', default=None,
-                    help='Use this option to pass a (case-insensitive) regular expression pattern that will be used to '
-                         'filter and select only submitters whose names *or* student numbers match. For example,'
-                         '`^Matt(?:hew)?\\w*` will match only students whose first name is `Matt` or `Matthew`, '
-                         'whereas `^123\\d{3}$` will match six–digit student numbers starting with `123`. In groups '
-                         'mode this pattern is used to match group names only')
-parser.add_argument('--multiple-attachments', action='store_true',
-                    help='Use this option if there are multiple assignment attachments per student or group. This '
-                         'will change the behaviour of the script so that a new subfolder is created for each '
-                         'submission, named as the student\'s number or the group\'s name. The original filename '
-                         'will be used for each attachment that is downloaded. Without this option, any additional '
-                         'attachments will be ignored, and only the first file found will be downloaded')
-args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('url', nargs=1,
+                        help='Please provide the URL of the assignment to download submissions for. Files will be '
+                             'saved in a folder named [assignment ID] (see the `--working-directory` option to '
+                             'configure this)')
+    parser.add_argument('--working-directory', default=None,
+                        help='The location to use for output (which will be created if it does not exist). Default: '
+                             'the same directory as this script')
+    parser.add_argument('--speedgrader-file', default=None,
+                        help='Set this option to `XLSX` or `CSV` to create a file in the specified format containing '
+                             'students\' (or groups\') names, IDs (both Canvas and institutional) and a link to the '
+                             'SpeedGrader page for the assignment, which is useful when marking activities such as '
+                             'presentations or ad hoc tasks. No attachments are downloaded in this mode')
+    parser.add_argument('--submitter-pattern', default=None,
+                        help='Use this option to pass a (case-insensitive) regular expression pattern that will be '
+                             'used to filter and select only submitters whose names *or* student numbers match. For '
+                             'example, `^Matt(?:hew)?\\w*` will match only students whose first name is `Matt` or '
+                             '`Matthew`, whereas `^123\\d{3}$` will match six–digit student numbers starting with '
+                             '`123`. In groups mode this pattern is used to match *group names* only')
+    parser.add_argument('--multiple-attachments', action='store_true',
+                        help='Use this option if there are multiple assignment attachments per student or group. This '
+                             'will change the behaviour of the script so that a new subfolder is created for each '
+                             'submission, named as the student\'s number or the group\'s name. The original filename '
+                             'will be used for each attachment that is downloaded. Without this option, any additional '
+                             'attachments will be ignored, and only the first file found will be downloaded')
+    return parser.parse_args()
+
+
+args = Args.interactive(get_args)
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 ASSIGNMENT_ID = Utils.get_assignment_id(ASSIGNMENT_URL)  # used only for output directory
 working_directory = os.path.dirname(

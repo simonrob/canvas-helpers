@@ -5,8 +5,9 @@ easily delete some or all course content before starting again or importing from
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 
+import argparse
 import json
 import sys
 
@@ -14,21 +15,26 @@ import requests
 
 from canvashelpers import Args, Utils
 
-parser = Args.ArgumentParser()
-parser.add_argument('url', nargs=1, help='Please provide the URL of the course to be cleaned')
-parser.add_argument('--all', action='store_true', help='Delete all of a course\'s content (equivalent to passing '
-                                                       'every other available option)')
-parser.add_argument('--pages', action='store_true', help='Delete all of a course\'s pages (including the front page)')
-parser.add_argument('--modules', action='store_true', help='Delete all of a course\'s modules')
-parser.add_argument('--assignments', action='store_true', help='Delete all of a course\'s assignments')
-parser.add_argument('--rubrics', action='store_true', help='Delete all of a course\'s rubrics')
-parser.add_argument('--quizzes', action='store_true', help='Delete all of a course\'s quizzes')
-parser.add_argument('--discussions', action='store_true', help='Delete all of a course\'s discussions')
-parser.add_argument('--announcements', action='store_true', help='Delete all of a course\'s announcements')
-parser.add_argument('--events', action='store_true', help='Delete all of a course\'s events')
-parser.add_argument('--files', action='store_true', help='Delete all of a course\'s files and folders')
-args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('url', nargs=1, help='Please provide the URL of the course to be cleaned')
+    parser.add_argument('--all', action='store_true', help='Delete/reset all of a course\'s content (equivalent to '
+                                                           'passing every other available option)')
+    parser.add_argument('--pages', action='store_true',
+                        help='Delete all of a course\'s pages (including the front page)')
+    parser.add_argument('--modules', action='store_true', help='Delete all of a course\'s modules')
+    parser.add_argument('--assignments', action='store_true', help='Delete all of a course\'s assignments')
+    parser.add_argument('--rubrics', action='store_true', help='Delete all of a course\'s rubrics')
+    parser.add_argument('--quizzes', action='store_true', help='Delete all of a course\'s quizzes')
+    parser.add_argument('--discussions', action='store_true', help='Delete all of a course\'s discussions')
+    parser.add_argument('--announcements', action='store_true', help='Delete all of a course\'s announcements')
+    parser.add_argument('--events', action='store_true', help='Delete all of a course\'s events')
+    parser.add_argument('--files', action='store_true', help='Delete all of a course\'s files and folders')
+    return parser.parse_args()
+
+
+args = Args.interactive(get_args)
 COURSE_URL = Utils.course_url_to_api(args.url[0])
 
 course_details_response = requests.get(COURSE_URL, headers=Utils.canvas_api_headers())

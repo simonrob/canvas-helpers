@@ -4,8 +4,9 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-06-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 
+import argparse
 import csv
 import json
 import mimetypes
@@ -17,46 +18,54 @@ import requests
 
 from canvashelpers import Args, Utils
 
-parser = Args.ArgumentParser()
-parser.add_argument('url', nargs=1,
-                    help='Please provide the URL of the course whose students will be sent comments')
-parser.add_argument('--working-directory', default=None,
-                    help='The root directory to use for the script\'s operation. Within this directory, attachments '
-                         'and any `--comments-file` should be placed in a subfolder named as the course number (e.g., '
-                         'for a course at https://[canvas-domain]/courses/10000/, name the subfolder 10000). Default: '
-                         'the same directory as this script')
-parser.add_argument('--attachment-extension', default='pdf',
-                    help='The file extension of attachments to add to messages (without the dot separator). Files '
-                         'should be named following the format [student number].[extension]. Default: \'pdf\'')
-parser.add_argument('--attachment-mime-type', default=None,
-                    help='Canvas requires a hint about the MIME type of the attachment file you are uploading. The '
-                         'script is able to guess the correct value in most cases, but if you are uploading a file '
-                         'with an unusual extension or format then you can specify a value here.')
-parser.add_argument('--comments-file', default=None,
-                    help='An XLSX or CSV file containing a minimum of one column: student number. A second column can '
-                         'be added for per-student content that will be used as the conversation\'s message, '
-                         'overriding the global `--conversation-message`.')
-parser.add_argument('--conversation-subject', default='Course message',
-                    help='The subject of the conversation. The default value is \'Course message\'')
-parser.add_argument('--conversation-message', default='See attached file',
-                    help='The conversation message to be sent. The default value is \'See attached file\', but this '
-                         'can be overridden via this parameter or `--comments-file`. Use \\n for linebreaks')
-parser.add_argument('--delete-after-sending', action='store_true',
-                    help='Sending messages using this script can fill up your Sent folder. If that is an issue, use '
-                         'this parameter to remove sent messages after sending. This only affects your own view of the '
-                         'conversation; the message will remain in the recipient\'s Inbox, and if they reply you will '
-                         'still see the original context')
-parser.add_argument('--delete-conversation-attachments', action='store_true',
-                    help='Sending many messages with attachments will quickly fill up the very small (52.4MB) default '
-                         'Canvas per-user storage allowance. It is time-consuming to use the web interface to remove '
-                         'files and restore space; instead, running the script with this parameter will remove *all* '
-                         'files in your account\'s `conversation attachments` folder. If this parameter is set, all '
-                         'others except `--dry-run` are ignored, and the script will exit after completion. Once '
-                         'deleted, attachments are unavailable to both yourself *and* message recipients')
-parser.add_argument('--dry-run', action='store_true',
-                    help='Preview the script\'s actions without actually making any changes. Highly recommended!')
-args = Args.parse_args(parser, __version__)  # if no URL: interactively requests arguments if `isatty`; exits otherwise
+DEFAULT_MESSAGE = 'See attached file'
 
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('url', nargs=1,
+                        help='Please provide the URL of the course whose students will be sent comments')
+    parser.add_argument('--working-directory', default=None,
+                        help='The root directory to use for the script\'s operation. Within this directory, '
+                             'attachments and any `--comments-file` should be placed in a subfolder named as the '
+                             'course number (e.g., for a course at https://[canvas-domain]/courses/10000/, name the '
+                             'subfolder 10000). Default: the same directory as this script')
+    parser.add_argument('--attachment-extension', default='pdf',
+                        help='The file extension of attachments to add to messages (without the dot separator). Files '
+                             'should be named following the format [student number].[extension]. Default: \'pdf\'')
+    parser.add_argument('--attachment-mime-type', default=None,
+                        help='Canvas requires a hint about the MIME type of the attachment file you are uploading. The '
+                             'script is able to guess the correct value in most cases, but if you are uploading a file '
+                             'with an unusual extension or format then you can specify a value here.')
+    parser.add_argument('--comments-file', default=None,
+                        help='The name of an XLSX or CSV file located in `--working-directory` containing a minimum of '
+                             'one column: student number. A second column can be added for per-student content that '
+                             'will be used as the conversation\'s message, overriding `--conversation-message`.')
+    parser.add_argument('--conversation-subject', default='Course message',
+                        help='The subject of the conversation. The default value is \'Course message\'')
+    parser.add_argument('--conversation-message', default=DEFAULT_MESSAGE,
+                        help='The conversation message to be sent. The default value is \'%s\', but this can be '
+                             'overridden via this parameter or `--comments-file`. Use \\n for linebreaks' %
+                             DEFAULT_MESSAGE)
+    parser.add_argument('--delete-after-sending', action='store_true',
+                        help='Sending messages using this script can fill up your Sent folder. If that is an issue, '
+                             'use this parameter to remove sent messages after sending. This only affects your own '
+                             'view of the conversation; the message will remain in the recipient\'s Inbox, and if they '
+                             'reply you will still see the original context')
+    parser.add_argument('--delete-conversation-attachments', action='store_true',
+                        help='Sending many messages with attachments will quickly fill up the very small (52.4MB) '
+                             'default Canvas per-user storage allowance. It is time-consuming to use the web interface '
+                             'to remove files and restore space; instead, running the script with this parameter will '
+                             'remove *all* files in your account\'s `conversation attachments` folder. If this '
+                             'parameter is set, all others except `--dry-run` are ignored, and the script will exit '
+                             'after completion. Once deleted, attachments are unavailable to both yourself *and* '
+                             'message recipients')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Preview the script\'s actions without actually making any changes. Highly recommended!')
+    return parser.parse_args()
+
+
+args = Args.interactive(get_args)
 COURSE_URL = Utils.course_url_to_api(args.url[0])
 COURSE_ID = Utils.get_course_id(COURSE_URL)
 API_ROOT = COURSE_URL.split('/courses')[0]
@@ -176,7 +185,7 @@ for user in course_user_json:
     conversation_message = args.conversation_message
     if student_number in comments_map:
         conversation_message = comments_map[student_number]
-    elif attachment_file is None and args.conversation_message == parser.get_default('conversation_message'):
+    elif attachment_file is None and args.conversation_message == DEFAULT_MESSAGE:
         print('WARNING: could not find attachment/message for conversation (at least one item is required); skipping')
         continue
 

@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import json
@@ -138,8 +138,8 @@ class Utils:
                                                type_hint='assignment submissions list')
 
     @staticmethod
-    def filter_assignment_submissions(submission_list_json, groups_mode=False, include_unsubmitted=False,
-                                      ignored_users=None, sort_entries=False):
+    def filter_assignment_submissions(assignment_url, submission_list_json, groups_mode=False,
+                                      include_unsubmitted=False, ignored_users=None, sort_entries=False):
         """Filter a list of submissions (in parsed JSON format). Setting groups_mode to True will remove any users who
         are not in a group, and skip any duplicates (which occur because Canvas associates group submissions with each
         group member individually). Setting include_unsubmitted to True will include all entries, even those that do
@@ -167,6 +167,10 @@ class Utils:
                 ignored_submission = True
 
             if not ignored_submission:
+                if 'login_id' not in submission['user']:
+                    # this is the only reason to have the assignment URL in this function
+                    submission['user']['login_id'] = Utils.get_canvas_user_login_id(assignment_url,
+                                                                                    submission['user']['id'])
                 filtered_submission_list.append(submission)
 
         if sort_entries:
@@ -180,7 +184,7 @@ class Utils:
         return filtered_submission_list
 
     @staticmethod
-    def get_submitter_details(submission, groups_mode=False):
+    def get_submitter_details(assignment_url, submission, groups_mode=False):
         """For a given submission object (in parsed JSON format), return the submitter's details (the Canvas ID of
         the user who submitted, their Login ID (typically institutional student number), and their name). Setting
         groups_mode to True will return the Canvas group ID and the group name instead of Login ID and student name.
@@ -195,6 +199,10 @@ class Utils:
                 if 'login_id' in submission['user']:
                     # login_id is not always present (perhaps linked to individual marks in group assignments)
                     submitter['student_number'] = submission['user']['login_id']
+                else:
+                    # this is the only reason to have the assignment URL in this function
+                    submitter['student_number'] = Utils.get_canvas_user_login_id(assignment_url,
+                                                                                 submission['user']['id'])
         elif 'user' in submission:
             submitter = {'canvas_user_id': submission['user_id'], 'student_number': submission['user']['login_id'],
                          'student_name': submission['user']['name']}
@@ -219,19 +227,21 @@ class Utils:
                     if 'login_id' in user:
                         student_number = user['login_id']
                     else:
-                        # Canvas has a bug where login_id is missing in some requests - need to get manually (slowly...)
-                        print('WARNING: encountered Canvas bug in user list; requesting profile for', user['id'],
-                              'manually')
-                        user_profile_response = requests.get(
-                            '%s/users/%s/profile' % (assignment_url.split('/courses')[0], user['id']),
-                            headers=Utils.canvas_api_headers())
-                        if user_profile_response.status_code != 200:
-                            print('ERROR: unable to load user profile for', user['id'], '- resorting to email')
-                            student_number = user['email'].split('@')[0]
-                        else:
-                            student_number = user_profile_response.json()['login_id']
+                        student_number = Utils.get_canvas_user_login_id(assignment_url, user['id'])
                     submission_student_map.append({'student_number': student_number, 'user_id': user['id']})
         return submission_student_map
+
+    @staticmethod
+    def get_canvas_user_login_id(assignment_url, user_id):
+        # Canvas has a bug where login_id is missing in some requests - need to get individually (slowly...)
+        print('WARNING: encountered Canvas bug in user list; requesting profile for', user_id, 'individually')
+        user_profile_response = requests.get('%s/users/%s/profile' % (assignment_url.split('/courses')[0], user_id),
+                                             headers=Utils.canvas_api_headers())
+        if user_profile_response.status_code != 200:
+            print('ERROR: unable to load user profile for', user_id)
+            return None  # TODO: is there anything else we can do?
+        else:
+            return user_profile_response.json()['login_id']
 
     @staticmethod
     def parse_marks_file_row(marks_map, row):

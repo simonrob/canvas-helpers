@@ -5,7 +5,7 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -31,7 +31,7 @@ def get_args():
     parser.add_argument('--working-directory', default=None,
                         help='The location to use for output (which will be created if it does not exist). Default: '
                              'the same directory as this script')
-    parser.add_argument('--speedgrader-file', default=None,
+    parser.add_argument('--speedgrader-file', default=None, choices=['XLSX', 'CSV'], type=str.upper,
                         help='Set this option to `XLSX` or `CSV` to create a file in the specified format containing '
                              'students\' (or groups\') names, IDs (both Canvas and institutional) and a link to the '
                              'SpeedGrader page for the assignment, which is useful when marking activities such as '
@@ -89,8 +89,8 @@ if not submission_list_response:
     sys.exit()
 
 submission_list_json = json.loads(submission_list_response)
-filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json, groups_mode=GROUP_ASSIGNMENT,
-                                                               sort_entries=True)
+filtered_submission_list = Utils.filter_assignment_submissions(ASSIGNMENT_URL, submission_list_json,
+                                                               groups_mode=GROUP_ASSIGNMENT, sort_entries=True)
 
 
 def compare_attachment_dates(a1, a2):
@@ -100,7 +100,7 @@ def compare_attachment_dates(a1, a2):
 
 
 def filter_matched_submissions(single_submission):
-    submitter_details = Utils.get_submitter_details(single_submission, groups_mode=GROUP_ASSIGNMENT)
+    submitter_details = Utils.get_submitter_details(ASSIGNMENT_URL, single_submission, groups_mode=GROUP_ASSIGNMENT)
     if GROUP_ASSIGNMENT:
         return submitter_matcher.match(submitter_details['group_name'])
     return submitter_matcher.match(submitter_details['student_number']) or submitter_matcher.match(
@@ -119,7 +119,7 @@ download_count = 0
 download_total = len(filtered_submission_list)
 for submission in filtered_submission_list:
     download_count += 1
-    submitter = Utils.get_submitter_details(submission, groups_mode=GROUP_ASSIGNMENT)
+    submitter = Utils.get_submitter_details(ASSIGNMENT_URL, submission, groups_mode=GROUP_ASSIGNMENT)
     if not submitter:
         print('ERROR: submitter details not found for submission; skipping:', submission)
         continue

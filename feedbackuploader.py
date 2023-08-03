@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -146,7 +146,7 @@ if not course_enrolment_response:
 ignored_users = [user['user_id'] for user in json.loads(course_enrolment_response)]
 
 submission_list_json = json.loads(submission_list_response)
-filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json,
+filtered_submission_list = Utils.filter_assignment_submissions(ASSIGNMENT_URL, submission_list_json,
                                                                groups_mode=args.groups and not args.groups_individual,
                                                                include_unsubmitted=args.include_unsubmitted,
                                                                ignored_users=ignored_users, sort_entries=True)
@@ -185,7 +185,7 @@ submission_count = 0
 submission_total = len(filtered_submission_list)
 for submission in filtered_submission_list:
     submission_count += 1
-    submitter = Utils.get_submitter_details(submission, groups_mode=args.groups)
+    submitter = Utils.get_submitter_details(ASSIGNMENT_URL, submission, groups_mode=args.groups)
     if not submitter:
         print('WARNING: submitter details not found for submission; skipping:', submission)
         continue

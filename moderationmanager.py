@@ -24,7 +24,7 @@ Related tools:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -183,7 +183,7 @@ if not course_enrolment_response:
 ignored_users = [user['user_id'] for user in json.loads(course_enrolment_response)]
 
 submission_list_json = json.loads(submission_list_response)  # note: groups mode cannot be used when enabling moderation
-filtered_submission_list = Utils.filter_assignment_submissions(submission_list_json,
+filtered_submission_list = Utils.filter_assignment_submissions(ASSIGNMENT_URL, submission_list_json,
                                                                include_unsubmitted=args.include_unsubmitted,
                                                                ignored_users=ignored_users, sort_entries=True)
 if len(filtered_submission_list) <= 0:
@@ -193,7 +193,7 @@ if len(filtered_submission_list) <= 0:
 final_grades = {}
 skipped_submissions = set()  # we collate a list of student names whose submissions generated an error/warning
 for submission in filtered_submission_list:
-    submitter = Utils.get_submitter_details(submission)
+    submitter = Utils.get_submitter_details(ASSIGNMENT_URL, submission)
     if not submitter:
         print('\tWARNING: submitter details not found for submission; skipping:', submission)
         continue
@@ -404,7 +404,9 @@ grades_released_message = 'Assignment grades have already been published'  # Can
 # assignments where the rubric is not used for grading, and `--mark-rounding` adjustments)
 # note: the only way to detect the grade release status without attempting to actually release grades seems to be to
 # submit a request for a provisional grade for any student and check the text(!) of the error message
-first_student = {'student_id': Utils.get_submitter_details(next(iter(filtered_submission_list)))['canvas_user_id']}
+first_student = {
+    'student_id': Utils.get_submitter_details(ASSIGNMENT_URL, next(iter(filtered_submission_list)))['canvas_user_id']
+}
 provisional_grade_selection_response = requests.get('%s/provisional_grades/status' % ASSIGNMENT_URL,
                                                     data=first_student, headers=Utils.canvas_api_headers())
 if provisional_grade_selection_response.status_code == 400 and \
@@ -442,7 +444,7 @@ if not grades_released:
 print('\nUpdating final assignment grades')
 score_feedback_hint = 'See the rubric for criteria scores and a summary of marker feedback (if available)'
 for submission in filtered_submission_list:
-    submitter = Utils.get_submitter_details(submission)
+    submitter = Utils.get_submitter_details(ASSIGNMENT_URL, submission)
     if submitter['canvas_user_id'] not in final_grades:
         print('\tSkipping unmarked submission from', submitter)
         continue

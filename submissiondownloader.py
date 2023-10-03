@@ -5,7 +5,7 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-10-03'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -35,7 +35,8 @@ def get_args():
                         help='Set this option to `XLSX` or `CSV` to create a file in the specified format containing '
                              'students\' (or groups\') names, IDs (both Canvas and institutional) and a link to the '
                              'SpeedGrader page for the assignment, which is useful when marking activities such as '
-                             'presentations or ad hoc tasks. No attachments are downloaded in this mode')
+                             'presentations or ad hoc tasks. If present, Turnitin report links are also included. No '
+                             'attachments are downloaded in this mode')
     parser.add_argument('--submitter-pattern', default=None,
                         help='Use this option to pass a (case-insensitive) regular expression pattern that will be '
                              'used to filter and select only submitters whose names *or* student numbers match. For '
@@ -117,6 +118,7 @@ if args.submitter_pattern:
 
 download_count = 0
 download_total = len(filtered_submission_list)
+turnitin_links_present = False
 for submission in filtered_submission_list:
     download_count += 1
     submitter = Utils.get_submitter_details(ASSIGNMENT_URL, submission, groups_mode=GROUP_ASSIGNMENT)
@@ -128,11 +130,22 @@ for submission in filtered_submission_list:
         speedgrader_link = Utils.course_url_to_speedgrader(args.url[0], submitter['canvas_user_id'])
         if speedgrader_file.endswith('xlsx'):
             speedgrader_link = '=hyperlink("%s")' % speedgrader_link
+        turnitin_link = ''
+        if 'turnitin_data' in submission:
+            turnitin_links_present = True
+            turnitin_submission_key = list(submission['turnitin_data'].keys())[0]
+            turnitin_submission_id = submission['turnitin_data'][turnitin_submission_key]['outcome_response']['paperid']
+            turnitin_link = 'https://api.turnitinuk.com/api/lti/1p0/redirect/dv/report/%s/instructor' % \
+                            turnitin_submission_id
+            if speedgrader_file.endswith('xlsx'):
+                turnitin_link = '=hyperlink("%s")' % turnitin_link
         if GROUP_ASSIGNMENT:
-            speedgrader_output.append([submitter['group_name'], submitter['canvas_group_id'], speedgrader_link])
+            speedgrader_output.append(
+                [submitter['group_name'], submitter['canvas_group_id'], speedgrader_link, turnitin_link])
         else:
             speedgrader_output.append(
-                [submitter['student_number'], submitter['student_name'], submitter['canvas_user_id'], speedgrader_link])
+                [submitter['student_number'], submitter['student_name'], submitter['canvas_user_id'], speedgrader_link,
+                 turnitin_link])
         continue
 
     if 'attachments' in submission:
@@ -181,6 +194,8 @@ if speedgrader_file:
         spreadsheet_headers = ['Group name', 'Canvas group ID', 'Speedgrader link']
     else:
         spreadsheet_headers = ['Student number', 'Student name', 'Canvas user ID', 'Speedgrader link']
+    if turnitin_links_present:
+        spreadsheet_headers.append('Turnitin report link')
 
     if speedgrader_file.endswith('xlsx'):
         workbook = openpyxl.Workbook()

@@ -22,6 +22,10 @@ Next, obtain a Canvas API key from your account's Settings page and add this in 
 Once set up is complete, read the descriptions below to get started.
 Each script also has a `--help` option that provides further detail.
 
+If this all sounds a bit daunting to you, try installing [tooey](https://github.com/simonrob/tooey) or [gooey](https://github.com/chriskiehl/Gooey/), and the scripts will automatically provide an interface to help guide you through their usage.
+
+Pull requests to improve these tools are very welcome.
+
 
 ### Scripts and capabilities
 - [Attachment file/comment/mark uploader](feedbackuploader.py): When assignment marks are processed outside of Canvas, they can already be uploaded in bulk from a spreadsheet using the existing tools (import/export grades).

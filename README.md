@@ -33,6 +33,7 @@ See `python feedbackuploader.py --help` for additional options.
 - [Submission downloader/renamer](submissiondownloader.py): Canvas allows you to bulk download students' submission files, but does not give any control over their naming.
 It can be useful to have these files named according to students' numbers or group names, which is what this script does.
 Downloaded submissions are saved in a folder named as the assignment ID.
+If needed, the script can also download Turnitin report PDFs or a spreadsheet of links to each submission's SpeedGrader page.
 Usage: `python submissiondownloader.py [assignment URL]`.
 See `python submissiondownloader.py --help` for additional options.
 

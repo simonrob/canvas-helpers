@@ -5,9 +5,10 @@ institutional student number) or group name."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-10-03'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2023-10-04'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
+import concurrent.futures
 import csv
 import datetime
 import functools
@@ -15,6 +16,7 @@ import json
 import os
 import re
 import sys
+import time
 
 import openpyxl.utils
 import requests
@@ -36,7 +38,14 @@ def get_args():
                              'students\' (or groups\') names, IDs (both Canvas and institutional) and a link to the '
                              'SpeedGrader page for the assignment, which is useful when marking activities such as '
                              'presentations or ad hoc tasks. If present, Turnitin report links are also included. No '
-                             'attachments are downloaded in this mode')
+                             'assignment attachments are downloaded in this mode')
+    parser.add_argument('--turnitin-pdf-session-id', default=None,
+                        help='If needed, it is also possible to generate and download Turnitin similarity report PDFs '
+                             'instead of the original assignment submissions. To do this, first visit any Turnitin '
+                             'report page, then open your web browser\'s JavaScript console and enter'
+                             '`Object.fromEntries([document.cookie].map(v=>v.split(/=(.*)/s)))["legacy-session-id"]` '
+                             '(without quotes). Pass the resulting value (without quotes) using this parameter. None '
+                             'of the original assignment attachments are downloaded in this mode')
     parser.add_argument('--submitter-pattern', default=None,
                         help='Use this option to pass a (case-insensitive) regular expression pattern that will be '
                              'used to filter and select only submitters whose names *or* student numbers match. For '
@@ -108,6 +117,13 @@ def filter_matched_submissions(single_submission):
         submitter_details['student_name'])
 
 
+def get_turnitin_id(single_submission):
+    if 'turnitin_data' in single_submission:
+        turnitin_data = list(submission['turnitin_data'].values())[0]
+        return turnitin_data['outcome_response']['paperid']
+    return ''
+
+
 submitter_matcher = None
 if args.submitter_pattern:
     submitter_matcher = re.compile(args.submitter_pattern, flags=re.IGNORECASE)
@@ -116,9 +132,14 @@ if args.submitter_pattern:
           '-', len(matched_submissions), 'valid submissions remaining')
     filtered_submission_list = matched_submissions
 
+turnitin_links_present = False
+turnitin_report_downloads = {}
+turnitin_session_cookie = None
+if args.turnitin_pdf_session_id:
+    turnitin_session_cookie = {'cookie': 'session-id=%s' % args.turnitin_pdf_session_id}
+
 download_count = 0
 download_total = len(filtered_submission_list)
-turnitin_links_present = False
 for submission in filtered_submission_list:
     download_count += 1
     submitter = Utils.get_submitter_details(ASSIGNMENT_URL, submission, groups_mode=GROUP_ASSIGNMENT)
@@ -130,13 +151,10 @@ for submission in filtered_submission_list:
         speedgrader_link = Utils.course_url_to_speedgrader(args.url[0], submitter['canvas_user_id'])
         if speedgrader_file.endswith('xlsx'):
             speedgrader_link = '=hyperlink("%s")' % speedgrader_link
-        turnitin_link = ''
-        if 'turnitin_data' in submission:
+        turnitin_link = get_turnitin_id(submission)
+        if turnitin_link:
             turnitin_links_present = True
-            turnitin_submission_key = list(submission['turnitin_data'].keys())[0]
-            turnitin_submission_id = submission['turnitin_data'][turnitin_submission_key]['outcome_response']['paperid']
-            turnitin_link = 'https://api.turnitinuk.com/api/lti/1p0/redirect/dv/report/%s/instructor' % \
-                            turnitin_submission_id
+            turnitin_link = 'https://api.turnitinuk.com/api/lti/1p0/redirect/dv/report/%s/instructor' % turnitin_link
             if speedgrader_file.endswith('xlsx'):
                 turnitin_link = '=hyperlink("%s")' % turnitin_link
         if GROUP_ASSIGNMENT:
@@ -146,6 +164,26 @@ for submission in filtered_submission_list:
             speedgrader_output.append(
                 [submitter['student_number'], submitter['student_name'], submitter['canvas_user_id'], speedgrader_link,
                  turnitin_link])
+        continue
+
+    if turnitin_session_cookie:
+        turnitin_id = get_turnitin_id(submission)
+        if not turnitin_id:
+            print('WARNING: Turnitin PDF requested, but Turnitin information is missing for submission from', submitter)
+            continue
+
+        turnitin_pdf_generation_response = requests.post(
+            'https://ev.turnitinuk.com/paper/%s/queue_pdf?output=json' % turnitin_id,
+            data={'as': 1, 'or_type': 'similarity'}, headers=turnitin_session_cookie)
+
+        if turnitin_pdf_generation_response.status_code == 202:
+            turnitin_report_url = turnitin_pdf_generation_response.json()['url']
+            turnitin_report_downloads['%s&output=json' % turnitin_report_url] = submitter[
+                'group_name' if GROUP_ASSIGNMENT else 'student_number']  # we need the ID for saving, later
+            print('Queuing Turnitin PDF download from %s[truncated]' % turnitin_report_url.split('queue_pdf')[0])
+        else:
+            print('WARNING: Turnitin PDF generation failed for submission from', submitter,
+                  '- please refresh the Turnitin session ID (see `python submissiondownloader.py --help`)')
         continue
 
     if 'attachments' in submission:
@@ -165,17 +203,17 @@ for submission in filtered_submission_list:
             file_download_response = requests.get(document['url'])
             if file_download_response.status_code == 200:
                 if args.multiple_attachments:
-                    output_filename = os.path.join(submission_output_directory, document['filename'])
+                    output_file_path = os.path.join(submission_output_directory, document['filename'])
                 else:
-                    output_filename = os.path.join(submission_output_directory, '%s.%s' % (
+                    output_file_path = os.path.join(submission_output_directory, '%s.%s' % (
                         submitter['group_name' if GROUP_ASSIGNMENT else 'student_number'],
                         document['filename'].split('.')[-1].lower()))
 
-                with open(output_filename, 'wb') as output_file:
+                with open(output_file_path, 'wb') as output_file:
                     output_file.write(file_download_response.content)
                 late_status = ' (LATE: %d seconds)' % submission['seconds_late'] if submission['late'] else ''
                 print('Saved %s[truncated] as %s (%d of %d)%s' % (document['url'].split('download?')[0],
-                                                                  output_filename.replace(OUTPUT_DIRECTORY, '')[1:],
+                                                                  output_file_path.replace(OUTPUT_DIRECTORY, '')[1:],
                                                                   download_count, download_total, late_status))
 
             else:
@@ -195,7 +233,8 @@ if speedgrader_file:
     else:
         spreadsheet_headers = ['Student number', 'Student name', 'Canvas user ID', 'Speedgrader link']
     if turnitin_links_present:
-        spreadsheet_headers.append('Turnitin report link')
+        spreadsheet_headers.append(
+            'Turnitin report link (note if these links do not work, visit %s first then retry)' % args.url[0])
 
     if speedgrader_file.endswith('xlsx'):
         workbook = openpyxl.Workbook()
@@ -212,3 +251,44 @@ if speedgrader_file:
             writer = csv.writer(f)
             writer.writerow(spreadsheet_headers)
             writer.writerows(speedgrader_output)
+
+if args.turnitin_pdf_session_id:
+    print('Downloading queued Turnitin report PDFs')
+    download_count = 0
+    download_total = len(turnitin_report_downloads)
+    downloads_remaining = download_total
+    delay_time = 0.5
+    while downloads_remaining > 0:
+        # queue all requests concurrently
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            responses = [executor.submit(requests.get, report, headers=turnitin_session_cookie) for report
+                         in turnitin_report_downloads.keys()]
+            concurrent.futures.wait(responses)
+
+        # check each response's readiness, downloading and removing completed requests
+        for response in responses:
+            request_url = response.result().url
+            download_result_json = response.result().json()
+
+            if download_result_json['ready']:
+                download_count += 1
+                download_url = download_result_json['url']
+                file_download_response = requests.get(download_url, headers=turnitin_session_cookie)
+                if file_download_response.status_code == 200:
+                    output_filename = '%s.pdf' % turnitin_report_downloads[request_url]
+                    with open(os.path.join(OUTPUT_DIRECTORY, output_filename), 'wb') as output_file:
+                        output_file.write(file_download_response.content)
+                    print('Saved Turnitin PDF %s[truncated]' % download_url.split('queue_pdf')[0], 'as',
+                          output_filename, '(%d of %d)' % (download_count, download_total))
+
+                else:
+                    print('ERROR: Turnitin PDF download failed for submission from',
+                          turnitin_report_downloads[request_url], 'at', download_url, '- aborting')
+
+                del turnitin_report_downloads[request_url]
+
+        downloads_remaining = len(turnitin_report_downloads)
+        if downloads_remaining > 0:
+            delay_time *= 1.5
+            print('Waiting for', downloads_remaining, 'Turnitin report(s) not yet ready (delaying %.1fs)' % delay_time)
+            time.sleep(delay_time)

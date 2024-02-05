@@ -91,13 +91,16 @@ python -m pip install pandas
 
 
 ## JavaScript tools
-- [Canvas Helpers Userscript](canvashelpers.user.js): This UserScript can be used with an extension such as [TamperMonkey](https://www.tampermonkey.net/) to make various refinements to the Canvas web interface.
-Once you have installed TamperMonkey or similar, you can [add the script directly](https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js).
-Currently the script does the following:
+The following scripts can be used in conjunction with a UserScript browser extension to make various refinements to the Canvas web interface.
+If you don't already have a UserScript extension, the following options are recommended:
+- Violentmonkey: for [Firefox](https://addons.mozilla.org/firefox/addon/violentmonkey/), [Chrome](https://chrome.google.com/webstore/detail/violent-monkey/jinjaccalgkegednnccohejagnlnfdag) or [Edge](https://microsoftedge.microsoft.com/addons/detail/eeagobfjdenkkddmbclomhiblgggliao)
+- Userscripts: for [Safari](https://apps.apple.com/us/app/userscripts/id1463298887)
 
-  - Reduce the size of the homepage cards to allow more courses to be displayed at once
-  - Sort groups by name/number in the assignment selection box
-  - Reduce extra spacing around list items in various places within courses
+Once you have a UserScript extension, click a script's name in the list below to install it:
+- [Canvas Helpers](https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js): Currently, the script does the following:
+   - Reduce the size of the homepage cards to allow more courses to be displayed at once
+   - Sort groups by name/number in the assignment selection box
+   - Reduce extra spacing around list items in various places within courses
 
 
 

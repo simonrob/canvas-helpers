@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-02-02
+// @version      2024-02-05
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @description  A UserScript to help make common Canvas tasks more manageable
@@ -52,7 +52,7 @@
     // -----------------------------------------------------------------------------------------------------------------
     // Homepage: make course cards smaller and hide the "Published Courses" header
     // -----------------------------------------------------------------------------------------------------------------
-    runWhenReady('.ic-DashboardCard__box__header', function () {
+    runWhenReady('.ic-DashboardCard__box', function () {
         logCHMessage('Resizing card list and removing main header');
         GM_addStyle(`
             .ic-Layout-contentMain {

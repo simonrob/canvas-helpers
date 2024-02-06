@@ -60,9 +60,9 @@ See `python webpamanager.py --help` for further instructions.
 
 - [Moderation manager](moderationmanager.py): The intended use of the inbuilt Canvas moderation tools is for one or more markers to initially grade submissions, and then a moderating marker to review these, either selecting one mark as the final grade or providing their own (often naturally an average of the existing marks).
 Like so many of the platform's features, this works relatively well with small classes, but is totally impractical at larger course sizes.
-In addition, even with smaller classes, moderation does not always work well when rubrics are used - any comments entered by markers whose score is not chosen as the final grade are simply discarded.
+In addition, even with smaller classes, moderation does not always work well when rubrics are used – any comments entered by markers whose score is not chosen as the final grade are simply discarded.
 This script automates the process of averaging marks from multiple markers; and, when rubrics are used, combines all markers' grades and feedback into a single final rubric that is released (anonymously or with marker names attached) to the student.
-Note that the underlying limitations of the Canvas moderation features still apply; in particular the rather arbitrary limit of 10 unique markers per _assignment_ (not per student).
+Note that the underlying limitations of the Canvas moderation features still apply; in particular the rather arbitrary limit of [10 unique markers per _assignment_](https://community.canvaslms.com/t5/Canvas-Ideas/Assignments-Maximum-number-of-moderators-change-to-limit/idi-p/530239) (not per student).
 See `python moderationmanager.py --help` for further instructions.
 
 - [Quiz result exporter](quizexporter.py): When using quizzes as assignments that need review or processing of some form (rather than just predetermined correct/incorrect responses), the "New Quizzes" feature on Canvas is far worse than the old version, and–most importantly, for large class sizes–does not allow bulk response export.
@@ -71,7 +71,7 @@ In the meantime, this script allows you to export all quiz responses to an XLSX 
 Usage: `python quizexporter.py [assignment URL]`.
 See `python quizexporter.py --help` for additional options.
 
-- [Course cleaner](coursecleaner.py): Canvas supports the use of course templates that are often used to fill new courses with example content.
+- [Course cleaner](coursecleaner.py): Canvas supports the use of course templates ("Blueprints") that are often used to fill new courses with example content.
 While this can be useful, if over-used it tends to be more of an annoyance than a helpful starting point. 
 This script allows you to easily delete some or all course content (e.g., pages, modules, assignments, etc.) before starting again or importing from an existing course.
 See `python coursecleaner.py --help` for further instructions.
@@ -97,11 +97,13 @@ If you don't already have a UserScript extension, the following options are reco
 - Userscripts: for [Safari](https://apps.apple.com/us/app/userscripts/id1463298887)
 
 Once you have a UserScript extension, click a script's name in the list below to install it:
-- [Canvas Helpers](https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js): Currently, the script does the following:
+- [Canvas helpers](https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js): Currently, the script does the following:
    - Reduce the size of the homepage cards to allow more courses to be displayed at once
    - Sort groups by name/number in the assignment selection box
    - Reduce extra spacing around list items in various places within courses
 
+- [Sort the roster](https://github.com/simonrob/canvancement/raw/sort-roster/roster/sort-roster/sort-roster.user.js): A slightly enhanced version of an [original script](https://github.com/simonrob/canvancement/tree/sort-roster/roster/sort-roster) by James Jones that allows the Canvas People pages to be sorted, and automatically loads all members of a course.
+James' [Canvancement project](https://github.com/jamesjonesmath/canvancement) is well worth exploring for a wide range of other useful scripts.
 
 
 ## Additional resources

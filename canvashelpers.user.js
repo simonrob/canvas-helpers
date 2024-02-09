@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-02-05
+// @version      2024-02-08
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @description  A UserScript to help make common Canvas tasks more manageable
@@ -12,7 +12,7 @@
 // @grant        GM_addStyle
 // @run-at       document-end
 // ==/UserScript==
-/* global $ */
+/* global $, GM_addStyle */
 
 (function () {
     'use strict';
@@ -28,31 +28,10 @@
         }
     `);
 
-    // Convenience function to run a callback only after an element matching readySelector has been added to the page.
-    // Gives up after 1 minute. See: https://github.com/Tampermonkey/tampermonkey/issues/1279#issuecomment-875386821
-    // Example: runWhenReady('.search-result', yourCallbackFunction);
-    function runWhenReady(readySelector, callback) {
-        let numAttempts = 0;
-        const tryNow = function () {
-            const elem = document.querySelector(readySelector);
-            if (elem) {
-                callback(elem);
-            } else {
-                numAttempts++;
-                if (numAttempts >= 34) {
-                    logCHMessage('Giving up `runWhenReady` - could not find `' + readySelector + '`');
-                } else {
-                    setTimeout(tryNow, 250 * Math.pow(1.1, numAttempts));
-                }
-            }
-        };
-        tryNow();
-    }
-
     // -----------------------------------------------------------------------------------------------------------------
-    // Homepage: make course cards smaller and hide the "Published Courses" header
+    // Homepage: make course cards smaller and hide the "Published Courses" header (in staff view)
     // -----------------------------------------------------------------------------------------------------------------
-    runWhenReady('.ic-DashboardCard__box', function () {
+    if (['', '/dashboard'].includes(window.location.pathname.replace(/\/$/, ''))) {
         logCHMessage('Resizing card list and removing main header');
         GM_addStyle(`
             .ic-Layout-contentMain {
@@ -84,49 +63,13 @@
                 padding: 12px 0;
             }
         `);
-    });
-
-    // -----------------------------------------------------------------------------------------------------------------
-    // Group assignments: sort the list of groups by group number (ascending)
-    // -----------------------------------------------------------------------------------------------------------------
-    runWhenReady('#assignment-speedgrader-link select optgroup option', function () {
-        logCHMessage('Sorting SpeedGrader group names');
-        // Move the download button a little further away to prevent accidental clicks
-        GM_addStyle(`
-            #speed_grader_link_mount_point {
-                margin-bottom: 3rem !important;
-            }
-        `);
-
-        // Sort the option list - see: https://stackoverflow.com/a/12073377
-        const options = $('select optgroup option');
-        const arr = options.map(function (_, o) {
-            return {
-                t: $(o).text(),
-                v: o.value
-            };
-        }).get();
-        arr.sort(function (o1, o2) {
-            return o1.t.localeCompare(o2.t, undefined, {
-                numeric: true,
-                sensitivity: 'base'
-            });
-        });
-        options.each(function (i, o) {
-            o.value = arr[i].v;
-            $(o).text(arr[i].t);
-        });
-
-        // Deselect the current option (which Canvas itself caches, and ends up being mis-mapped)
-        document.getElementsByTagName('select')[0].value = '';
-        document.getElementsByClassName('icon-speed-grader')[0].href = '#';
-    });
+    }
 
     // -----------------------------------------------------------------------------------------------------------------
     // Item lists: remove extra spacing around Modules, Assignments, etc like Condensed MAQ Layout, but a little less
-    // aggressive (see: github.com/paulbui/canvas-tweaks)
+    // aggressive (see: https://github.com/paulbui/canvas-tweaks)
     // -----------------------------------------------------------------------------------------------------------------
-    runWhenReady('.item-group-condensed', function () {
+    if (window.location.pathname.startsWith('/courses')) {
         logCHMessage('Removing spacing around list items');
         GM_addStyle(`
             .item-group-condensed .ig-header {
@@ -143,5 +86,5 @@
                 font-size : 1rem !important;
             }
         `);
-    });
+    }
 })();

@@ -7,7 +7,7 @@ any existing data lost*) if it is present."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-02-13'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -36,7 +36,7 @@ def get_args():
 
 args = Args.interactive(get_args)
 COURSE_URL = Utils.course_url_to_api(args.url[0])
-print('%screating identifier column for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))
+print('%sreating identifier column for course %s' % ('DRY RUN: c' if args.dry_run else 'C', args.url[0]))
 
 # need to check existing columns - only one private ('teacher_notes') column is allowed per course
 # example: {'title': 'Notes', 'position': 1, 'teacher_notes': True, 'read_only': False, 'id': 100, 'hidden': False}

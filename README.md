@@ -102,8 +102,10 @@ Once you have a UserScript extension, click a script's name in the list below to
    - Sort groups by name/number in the assignment selection box
    - Reduce extra spacing around list items in various places within courses
 
-- [Sort the roster](https://github.com/simonrob/canvancement/raw/sort-roster/roster/sort-roster/sort-roster.user.js): A slightly enhanced version of an [original script](https://github.com/simonrob/canvancement/tree/sort-roster/roster/sort-roster) by James Jones that allows the Canvas People pages to be sorted, and automatically loads all members of a course.
+- [Sort the roster](https://github.com/simonrob/canvancement/raw/sort-roster/roster/sort-roster/sort-roster.user.js): A slightly enhanced version of an [original script](https://github.com/jamesjonesmath/canvancement/tree/master/roster/sort-roster) by James Jones that allows the Canvas People pages to be sorted, and automatically loads all members of a course.
 James' [Canvancement project](https://github.com/jamesjonesmath/canvancement) is well worth exploring for a wide range of other useful scripts.
+
+- [All courses sort](https://github.com/simonrob/canvancement/raw/combine-course-tables/courses/all-courses/all-courses-sort.user.js): A slightly enhanced version of another [James Jones script](https://github.com/jamesjonesmath/canvancement/tree/master/courses/all-courses) that combines the tables on the course list page, and allows them to be sorted and filtered.
 
 
 ## Additional resources

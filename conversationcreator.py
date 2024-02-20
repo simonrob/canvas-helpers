@@ -4,7 +4,7 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-02-20'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -24,12 +24,22 @@ DEFAULT_MESSAGE = 'See attached file'
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('url', nargs=1,
-                        help='Please provide the URL of the course whose students will be sent comments')
+                        help='Please provide the URL of the course whose students will be sent comments; or, in '
+                             '`--groups` mode, the URL of the groups page that shows the group set you wish to use '
+                             '(e.g., https://canvas.instructure.com/courses/[course-id]/groups#tab-[set-id]). Note '
+                             'that Canvas does not always update the URL when switching group tabs, so it is worth '
+                             'opening the desired group in a new window to be sure (and using `--dry-run`)')
     parser.add_argument('--working-directory', default=None,
                         help='The root directory to use for the script\'s operation. Within this directory, '
                              'attachments and any `--comments-file` should be placed in a subfolder named as the '
                              'course number (e.g., for a course at https://[canvas-domain]/courses/10000/, name the '
                              'subfolder 10000). Default: the same directory as this script')
+    parser.add_argument('--groups', action='store_true',
+                        help='Use this option if you would like to start a group conversation rather than individual '
+                             '1:1 messages. In this mode, the identifiers in the first column of `--comments-file` '
+                             'the group names, rather than student IDs, and must be exactly as specified on Canvas. '
+                             'For example, if you have a Canvas group called \'Group 1\', use this exact text; \'1\' '
+                             'alone will not work')
     parser.add_argument('--attachment-extension', default='pdf',
                         help='The file extension of attachments to add to messages (without the dot separator). Files '
                              'should be named following the format [student number].[extension]. Default: \'pdf\'')
@@ -115,9 +125,8 @@ INPUT_DIRECTORY = os.path.join(
     os.path.dirname(os.path.realpath(__file__)) if args.working_directory is None else args.working_directory,
     str(COURSE_ID))
 if not os.path.exists(INPUT_DIRECTORY):
-    print('ERROR: input directory not found - please place all files to upload (and any `--comments-file`) in the '
-          'folder %s' % INPUT_DIRECTORY)
-    sys.exit()
+    print('Input directory not found - to customise messages for individual recipients, please place all files to '
+          'upload (and any `--comments-file`) in the folder %s' % INPUT_DIRECTORY)
 print('%screating conversations for course %s' % ('DRY RUN: ' if args.dry_run else '', args.url[0]))
 
 # load and parse comments
@@ -141,11 +150,17 @@ if args.comments_file:
               comments_file)
 
 # get the course's students
-course_user_response = Utils.get_course_users(COURSE_URL, enrolment_types=['student'])
-if not course_user_response:
-    print('ERROR: unable to retrieve course student list; aborting')
-    sys.exit()
-course_user_json = json.loads(course_user_response)
+if args.groups:
+    group_id, message_recipient_json = Utils.get_course_groups(args.url[0])
+    if not group_id or not message_recipient_json:
+        print('ERROR: unable to get group set ID from given URL', args.url[0])
+        sys.exit()
+else:
+    course_user_response = Utils.get_course_users(COURSE_URL, enrolment_types=['student'])
+    if not course_user_response:
+        print('ERROR: unable to retrieve course student list; aborting')
+        sys.exit()
+    message_recipient_json = json.loads(course_user_response)
 
 SELF_ID, user_name = Utils.get_user_details(API_ROOT, user_id='self')
 if not SELF_ID:
@@ -155,20 +170,25 @@ if not SELF_ID:
 # FILES_SUBFOLDER_PATH = 'conversation attachments/%s/%d/%d' % (
 #     os.path.splitext(os.path.basename(__file__))[0], COURSE_ID, int(time.time()))
 FILES_SUBFOLDER_PATH = 'conversation attachments'
-print('Generating', len(course_user_json), 'conversations and uploading attachments to %s\'s folder:' % user_name,
+print('Generating', len(message_recipient_json), 'conversations and uploading attachments to %s\'s folder:' % user_name,
       '%s/files/folder/users_%d/%s' % (args.url[0].split('/courses')[0], SELF_ID,
                                        FILES_SUBFOLDER_PATH.replace(' ', '%20')))  # display formatting only
 
-user_count = 0
-user_total = len(course_user_json)
-for user in course_user_json:
-    user_count += 1
-    print('\nProcessing message', user_count, 'of', user_total, 'to', user['name'], '(%s)' % user['login_id'])
+recipient_count = 0
+recipient_total = len(message_recipient_json)
+for recipient in message_recipient_json:
+    recipient_count += 1
+    print('\nProcessing message', recipient_count, 'of', recipient_total, 'to', end=' ')
+    if args.groups:
+        recipient_identifier = message_recipient_json[recipient][0]['group_name']
+        canvas_recipient_id = 'group_%s' % message_recipient_json[recipient][0]['group_id']
+        print(recipient_identifier, [r['student_number'] for r in message_recipient_json[recipient]])
+    else:
+        recipient_identifier = recipient['login_id']
+        canvas_recipient_id = recipient['id']
+        print(recipient['name'], '(%s)' % recipient_identifier)
 
-    canvas_id = user['id']
-    student_number = user['login_id']
-
-    attachment_file = '%s.%s' % (student_number, args.attachment_extension)
+    attachment_file = '%s.%s' % (recipient_identifier, args.attachment_extension)
     attachment_path = os.path.join(INPUT_DIRECTORY, attachment_file)
     attachment_mime_type = args.attachment_mime_type or mimetypes.guess_type(attachment_path)[0]
     attachment_exists = os.path.exists(attachment_path)
@@ -183,20 +203,22 @@ for user in course_user_json:
 
     # filter out unset fields, allowing any combination of mark/comment/attachment)
     conversation_message = args.conversation_message
-    if student_number in comments_map:
-        conversation_message = comments_map[student_number]
-    elif attachment_file is None and args.conversation_message == DEFAULT_MESSAGE:
-        print('WARNING: could not find attachment/message for conversation (at least one item is required); skipping')
-        continue
+    if recipient_identifier in comments_map and comments_map[recipient_identifier]:
+        conversation_message = comments_map[recipient_identifier]
 
     # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.update
     conversation_data = {
-        'recipients[]': [canvas_id],
+        'recipients[]': [canvas_recipient_id],
         'subject': args.conversation_subject,
         'body': conversation_message.replace('\\n', '\n'),
         'force_new': True,
+        'group_conversation': True if args.groups else 'false',  # note: must be string for false
         'context_code': 'course_%d' % COURSE_ID
     }
+    if args.groups:
+        # the API is not clear whether the course or group context is most appropriate for group messages... either way,
+        # these still seem to show as individual messages in the web interface (i.e., Reply All doesn't include groups)
+        conversation_data['context_code'] = canvas_recipient_id
     if conversation_message != args.conversation_message:
         print('Adding conversation message from spreadsheet:', conversation_message)
     else:
@@ -246,7 +268,8 @@ for user in course_user_json:
 
     # the link we print is the same as the one Canvas itself uses in notification emails, but the current web behaviour
     # is to redirect rather uselessly to the message inbox (or return 404 if --delete-after-sending has been set)
-    print('\tMessage successfully sent to user', canvas_id, '(%s)' % student_number, ':',
+    print('\tMessage successfully sent to', recipient_identifier,
+          '(%s%s)' % ('' if args.groups else 'user ', canvas_recipient_id), ':',
           '%s/conversations/%d' % (args.url[0].split('/courses')[0], message_creation_response.json()[0]['id']))
 
     if args.delete_after_sending:

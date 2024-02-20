@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-02-15
+// @version      2024-02-20
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @description  A UserScript to help make common Canvas tasks more manageable
@@ -29,10 +29,13 @@
     `);
 
     // remove the courses popout menu and just go straight to the list (Canvancement's "All Courses Sort" recommended)
-    document.getElementById('global_nav_courses_link').onclick = function () {
-        window.location.href = this.href;
-        return false;
-    };
+    const allCourses = document.getElementById('global_nav_courses_link');
+    if (allCourses) {
+        allCourses.onclick = function () {
+            window.location.href = this.href;
+            return false;
+        };
+    }
 
     // -----------------------------------------------------------------------------------------------------------------
     // Homepage: make course cards smaller and hide the "Published Courses" header (in staff view)

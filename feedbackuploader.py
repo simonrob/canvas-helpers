@@ -5,18 +5,15 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-02-20'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
-import csv
 import json
 import mimetypes
 import os
 import sys
 
-import openpyxl
 import requests
-
 
 from canvashelpers import Args, Config, Utils
 
@@ -30,8 +27,8 @@ def get_args():
     parser.add_argument('--working-directory', default=None,
                         help='The root directory to use for the script\'s operation. Within this directory, '
                              'attachments and any `--marks-file` should be placed in a subfolder named as the '
-                             'assignment number (e.g., for an assignment at https://[canvas-domain]/courses/10000/assi'
-                             'gnments/123456, name the subfolder 123456). Default: the same directory as this script')
+                             'assignment number (e.g., for an assignment at https://[canvas-domain]/courses/[course-id]'
+                             '/assignments/1234, name the subfolder 1234). Default: the same directory as this script')
     parser.add_argument('--attachment-extension', default='pdf',
                         help='The file extension of the attachments to upload (without the dot separator). Attachments '
                              'should be named following the format [student number].[extension] (or, in group mode, '
@@ -104,20 +101,12 @@ print('%sUploading assignment feedback from %s to assignment %s' % (
 marks_map = {}
 if args.marks_file:
     marks_file = os.path.join(INPUT_DIRECTORY, args.marks_file)
-    if os.path.exists(marks_file):
-        if marks_file.lower().endswith('.xlsx'):
-            marks_workbook = openpyxl.load_workbook(marks_file)
-            marks_sheet = marks_workbook[marks_workbook.sheetnames[0]]
-            for row in marks_sheet.iter_rows():
-                Utils.parse_marks_file_row(marks_map, [entry.value for entry in row])
-        else:
-            with open(marks_file, newline='') as marks_csv:
-                reader = csv.reader(marks_csv)
-                for row in reader:
-                    Utils.parse_marks_file_row(marks_map, row)
+    marks_map = Utils.get_marks_mapping(marks_file)
+    if marks_map:
         print('Loaded marks/feedback mapping for', len(marks_map), 'submissions:', marks_map)
     else:
-        print('Ignoring marks file argument', args.marks_file, '- not found in assignment directory at', marks_file)
+        print('Ignoring marks file argument', args.marks_file, '- empty or not found in assignment directory at',
+              marks_file)
 
 assignment_details_response = requests.get(ASSIGNMENT_URL, headers=Utils.canvas_api_headers())
 if assignment_details_response.status_code != 200:

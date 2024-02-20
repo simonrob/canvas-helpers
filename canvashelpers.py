@@ -3,14 +3,17 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2023 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-13'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-02-20'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
+import csv
 import json
 import os
 import re
 import sys
+import tempfile
 
+import openpyxl
 import requests.structures
 
 
@@ -126,6 +129,131 @@ class Utils:
                                                type_hint='filtered course enrolments list')
 
     @staticmethod
+    def get_course_groups(course_group_tab_url, group_by='group_number'):
+        # noinspection GrazieInspection
+        """Get details of all groups within a group set. Pass the URL of the desired group set as shown in the web
+        interface (i.e., https://canvas.instructure.com/courses/[course ID]/groups#tab-[group ID]). Note that groups
+        *must* be named in the format [name][space][number] (i.e., "Group 1", "Group 2", etc). This API endpoint is
+        currently a beta method, and not always reliable, so we also include an iteration approach. Returns a tuple of
+        (group set ID, group set dict). The `group_by` parameter can either be `group_number` (default) for the integer
+        sequence number of each group; `group_name` for the full name string; or, any other value for student numbers"""
+        group_set_id = course_group_tab_url.split('#tab-')[-1]
+        group_sets = {}
+        try:
+            group_set_id = int(group_set_id)
+        except ValueError:
+            print('ERROR: unable to get group set ID from given URL', course_group_tab_url)
+            return None, None
+
+        csv_headers = None
+        api_url = Utils.course_url_to_api(course_group_tab_url).split('/courses')[0]
+        group_set_response = requests.get('%s/group_categories/%d/export' % (api_url, group_set_id),
+                                          headers=Utils.canvas_api_headers())
+        if group_set_response.status_code != 200:
+            if group_set_response.status_code == 401:
+                # archived courses don't support this method, so we use the old iterative approach
+                print('WARNING: unable to bulk export group set data; switching to legacy iteration method')
+                return Utils._get_course_groups_legacy(course_group_tab_url, group_by)
+            else:
+                print('ERROR: unable to load group set', group_set_id, '- aborting',
+                      '(error:', group_set_response.text, ')')
+                sys.exit()
+
+        group_cache_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        cache_file_name = group_cache_file.name
+        group_cache_file.write(group_set_response.text)
+        group_cache_file.close()
+        with open(cache_file_name) as group_cache_file:
+            reader = csv.reader(group_cache_file)
+            for row in reader:
+                if not csv_headers:
+                    csv_headers = row
+                    continue
+
+                try:
+                    # skip non-students, often with non-numeric IDs (but intentionally keep as a string) for later use
+                    # as Canvas is inconsistent with its treatment of these (e.g., course users: int; groups: string)
+                    int(row[csv_headers.index('login_id')])
+                except ValueError:
+                    print('WARNING: skipping non-numeric group member login_id:', row[csv_headers.index('login_id')])
+                    continue
+                if not row[csv_headers.index('group_name')]:  # course members not in a group have an empty group name
+                    print('WARNING: skipping course member not in any group:', row[csv_headers.index('login_id')])
+                    continue
+
+                group_entry = {
+                    'group_name': row[csv_headers.index('group_name')],
+                    'group_id': row[csv_headers.index('canvas_group_id')],
+                    'group_number': int(row[csv_headers.index('group_name')].split(' ')[-1]),
+                    'student_number': row[csv_headers.index('login_id')],
+                    'student_name': row[csv_headers.index('name')],
+                    'student_canvas_id': row[csv_headers.index('canvas_user_id')]
+                }
+
+                if group_by in ['group_number', 'group_name']:
+                    if group_entry[group_by] not in group_sets:
+                        group_sets[group_entry[group_by]] = []
+                    group_sets[group_entry[group_by]].append(group_entry)
+                else:
+                    group_sets[group_entry['student_number']] = group_entry
+        os.remove(cache_file_name)
+
+        print('Loaded', len(group_sets), 'valid group records from', course_group_tab_url)
+        return group_set_id, dict(sorted(group_sets.items()))
+
+    @staticmethod
+    def _get_course_groups_legacy(course_group_tab_url, group_by):
+        group_set_id = course_group_tab_url.split('#tab-')[-1]
+        group_sets = {}
+        try:
+            group_set_id = int(group_set_id)
+        except ValueError:
+            print('ERROR: unable to get group set ID from given URL', course_group_tab_url)
+            return None, None
+
+        api_url = Utils.course_url_to_api(course_group_tab_url).split('/courses')[0]
+        group_set_response = Utils.canvas_multi_page_request('%s/group_categories/%d/groups' % (api_url, group_set_id),
+                                                             type_hint='group sets')
+        if not group_set_response:
+            print('ERROR: unable to load group sets; aborting')
+            sys.exit()
+
+        group_set_json = json.loads(group_set_response)
+        for group in group_set_json:
+            group_members_response = Utils.canvas_multi_page_request('%s/groups/%d/users' % (api_url, group['id']),
+                                                                     type_hint='group')
+            if not group_members_response:
+                print('WARNING: unable to load group members; skipping group', group)
+                continue
+
+            group_members_json = json.loads(group_members_response)
+            for member in group_members_json:
+                try:
+                    int(member['login_id'])  # ignore non-students, who often have non-numeric IDs
+                except ValueError:
+                    print('WARNING: skipping non-numeric group member login_id:', member['login_id'])
+                    continue
+
+                group_entry = {
+                    'group_name': group['name'],
+                    'group_id': int(group['id']),
+                    'group_number': int(group['name'].split(' ')[-1]),
+                    'student_number': int(member['login_id']),
+                    'student_name': member['name'],
+                    'student_canvas_id': int(member['id'])
+                }
+
+                if group_by in ['group_number', 'group_name']:
+                    if group_entry[group_by] not in group_sets:
+                        group_sets[group_entry[group_by]] = []
+                    group_sets[group_entry[group_by]].append(group_entry)
+                else:
+                    group_sets[group_entry['student_number']] = group_entry
+
+        print('Loaded', len(group_sets), 'valid group records from', course_group_tab_url)
+        return group_set_id, dict(sorted(group_sets.items()))
+
+    @staticmethod
     def get_assignment_submissions(assignment_url, includes=None):
         """Get a list of assignment submissions, returning a string that can be parsed as JSON. This function is simply
         a wrapper around Utils.canvas_multi_page_request, but is kept to separate the API parameter complexity from
@@ -210,6 +338,22 @@ class Utils:
             submitter = {'canvas_user_id': submission['user_id'], 'student_number': submission['user']['login_id'],
                          'student_name': submission['user']['name']}
         return submitter
+
+    @staticmethod
+    def get_marks_mapping(marks_file):
+        marks_map = {}
+        if os.path.exists(marks_file):
+            if marks_file.lower().endswith('.xlsx'):
+                marks_workbook = openpyxl.load_workbook(marks_file)
+                marks_sheet = marks_workbook[marks_workbook.sheetnames[0]]
+                for row in marks_sheet.iter_rows():
+                    Utils.parse_marks_file_row(marks_map, [entry.value for entry in row])
+            else:
+                with open(marks_file, newline='') as marks_csv:
+                    reader = csv.reader(marks_csv)
+                    for row in reader:
+                        Utils.parse_marks_file_row(marks_map, row)
+        return marks_map
 
     @staticmethod
     def get_assignment_student_list(assignment_url):

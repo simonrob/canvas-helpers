@@ -55,7 +55,7 @@ Usage: Place your attachment files in the script's working directory, named acco
 See `python conversationcreator.py --help` for additional options.
 
 - [WebPA manager](webpamanager.py): [WebPA](https://webpaproject.lboro.ac.uk/) is a useful way of incorporating team member contribution feedback when running group-based assignments.
-This script helps run an offline version of this process using spreadsheets uploaded to a Canvas assignment, and handles both form generation and mark scaling.
+This script helps run either a Canvas (Old) Quiz-based version of this process; or, an offline version using spreadsheets uploaded to a Canvas assignment, and handles both form/quiz generation and subsequent mark scaling.
 See `python webpamanager.py --help` for further instructions.
 
 - [Moderation manager](moderationmanager.py): The intended use of the inbuilt Canvas moderation tools is for one or more markers to initially grade submissions, and then a moderating marker to review these, either selecting one mark as the final grade or providing their own (often naturally an average of the existing marks).

@@ -42,6 +42,12 @@ If needed, the script can also download Turnitin report PDFs or a spreadsheet of
 Usage: `python submissiondownloader.py [assignment URL]`.
 See `python submissiondownloader.py --help` for additional options.
 
+- [Bulk file uploader](bulkfileuploader.py): Canvas already allows you to upload multiple files at once, but setting their configuration can still be time-consuming.
+This script lets you upload the contents of a folder (selectively, if needed), and set licence types and publish in bulk.
+The script also has an option to list direct media links, which is useful when embedding a set of files in a page.
+Usage: `python bulkfileuploader.py [folder URL] --working-directory /path/to/directory`.
+See `python bulkfileuploader.py --help` for additional options.
+
 - [Student identifier](studentidentifier.py): Canvas sometimes seems to try quite hard to hide the fact that students typically have an institutional identifier (i.e., student number) that is different to their internal Canvas ID.
 This script adds a new custom column in a course's Gradebook that shows these student numbers.
 Note: by default, courses often have a hidden custom column called 'Notes' that is private to the course teacher.

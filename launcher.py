@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-02-21'  # ISO 8601 (YYYY-MM-DD)
 
 import subprocess
 import tkinter
@@ -20,18 +20,20 @@ tkinter.Button(window, text='Attachment file/comment/mark uploader',
                command=lambda: launch_tool('feedbackuploader')).grid(row=0, column=0)
 tkinter.Button(window, text='Submission downloader/renamer',
                command=lambda: launch_tool('submissiondownloader')).grid(row=0, column=1)
+tkinter.Button(window, text='Bulk file uploader',
+               command=lambda: launch_tool('bulkfileuploader')).grid(row=1, column=0)
 tkinter.Button(window, text='Student identifier',
-               command=lambda: launch_tool('studentidentifier')).grid(row=1, column=0)
+               command=lambda: launch_tool('studentidentifier')).grid(row=1, column=1)
 tkinter.Button(window, text='Conversation creator',
-               command=lambda: launch_tool('conversationcreator')).grid(row=1, column=1)
+               command=lambda: launch_tool('conversationcreator')).grid(row=2, column=0)
 tkinter.Button(window, text='WebPA manager',
-               command=lambda: launch_tool('webpamanager')).grid(row=2, column=0)
+               command=lambda: launch_tool('webpamanager')).grid(row=2, column=1)
 tkinter.Button(window, text='Moderation manager',
-               command=lambda: launch_tool('moderationmanager')).grid(row=2, column=1)
+               command=lambda: launch_tool('moderationmanager')).grid(row=3, column=0)
 tkinter.Button(window, text='Quiz result exporter',
-               command=lambda: launch_tool('quizexporter')).grid(row=3, column=0)
+               command=lambda: launch_tool('quizexporter')).grid(row=3, column=1)
 tkinter.Button(window, text='Course cleaner',
-               command=lambda: launch_tool('coursecleaner')).grid(row=3, column=1)
+               command=lambda: launch_tool('coursecleaner')).grid(row=4, column=0)
 
 window_left = (window.winfo_screenwidth() - window.winfo_reqwidth()) / 2
 window_top = (window.winfo_screenheight() - window.winfo_reqheight()) / 2

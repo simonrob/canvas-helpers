@@ -1,18 +1,18 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-02-20
+// @version      2024-02-21
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
+// @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
 // @description  A UserScript to help make common Canvas tasks more manageable
 // @author       Simon Robinson
 // @match        https://*.instructure.com/*
 // @match        https://canvas.swansea.ac.uk/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=instructure.com
-// @grant        GM_addStyle
+// @grant        none
 // @run-at       document-end
 // ==/UserScript==
-/* global GM_addStyle */
 
 (function () {
     'use strict';

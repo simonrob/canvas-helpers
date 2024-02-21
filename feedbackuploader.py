@@ -3,7 +3,7 @@ in Canvas. When doing so using the SpeedGrader it is very time-consuming to add 
 lets you upload a set of attachments, feedback comments and marks in bulk."""
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2023 Simon Robinson'
+__copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
 __version__ = '2024-02-20'  # ISO 8601 (YYYY-MM-DD)
 

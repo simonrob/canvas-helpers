@@ -1,7 +1,7 @@
 """A basic GUI launcher for the various tools in the Canvas Helpers collection."""
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2023 Simon Robinson'
+__copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
 __version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
 

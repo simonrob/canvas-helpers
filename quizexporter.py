@@ -6,7 +6,7 @@ previously took minutes can now take hours for larger class sizes. This script u
 limitation, exporting all responses to a single spreadsheet."""
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2023 Simon Robinson'
+__copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
 __version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 

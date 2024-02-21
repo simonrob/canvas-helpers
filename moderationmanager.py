@@ -1,3 +1,4 @@
+# noinspection GrazieInspection
 """The intended use of the Canvas moderation tools is for one or more markers to initially grade submissions, and then a
 moderating marker to review these, either selecting one mark as the final grade or providing their own (often naturally
 an average of the existing marks). Like so many of the platform's features, this works relatively well with small
@@ -22,7 +23,7 @@ Related tools:
 """
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2023 Simon Robinson'
+__copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
 __version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
 

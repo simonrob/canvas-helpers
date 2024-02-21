@@ -3,7 +3,7 @@ can be useful, if over-used it tends to be more of an annoyance than a helpful s
 easily delete some or all course content before starting again or importing from an existing course."""
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2023 Simon Robinson'
+__copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
 __version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
 

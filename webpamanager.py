@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-20'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-02-22'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import datetime
@@ -822,6 +822,7 @@ if all([not mark_key.isdigit() for mark_key in original_marks.index]):  # detect
     original_marks.index.names = ['Group']
 else:  # marks file is individual students
     original_marks.index.names = ['Subject']
+original_marks = original_marks.filter(['Original'])  # keep only the index and the mark colum; drop all others
 response_data = response_data.join(original_marks)
 response_data = response_data.sort_values(['Group', 'Subject'])
 

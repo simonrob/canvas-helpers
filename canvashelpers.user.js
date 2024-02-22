@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-02-21
+// @version      2024-02-22
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
+// @require      https://gist.githubusercontent.com/raw/86cbf1fa9f24f7d821632e9c1ca96571/waitForKeyElements.js
 // @description  A UserScript to help make common Canvas tasks more manageable
 // @author       Simon Robinson
 // @match        https://*.instructure.com/*
@@ -13,6 +14,7 @@
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
+/* global GM_addStyle */
 
 (function () {
     'use strict';
@@ -71,7 +73,31 @@
             .unpublished_courses_redesign .ic-DashboardCard__box {
                 padding: 12px 0;
             }
+            #right-side .shared-space h2 {
+                display: inline;
+            }
         `);
+
+        // add a new button to clear all todo list items
+        waitForKeyElements('.todo-list-header', function (header) {
+            const headerWrapper = document.createElement('div');
+            headerWrapper.setAttribute('class', 'h2 shared-space');
+            const clearIcon = document.createElement('a');
+            clearIcon.setAttribute('class', 'events-list icon-trash standalone-icon');
+            clearIcon.setAttribute('style', 'float:right; font-size:12px; font-size:0.75rem; font-weight:normal;');
+            clearIcon.setAttribute('href', '#');
+            clearIcon.addEventListener('click', function () {
+                const todoList = document.querySelectorAll('button[title="Ignore until new submission"]');
+                [...todoList].forEach(button => {
+                    button.click();
+                });
+                return false;
+            });
+            clearIcon.textContent = 'Clear all';
+            header.parentNode.insertBefore(headerWrapper, header);
+            headerWrapper.appendChild(header);
+            headerWrapper.appendChild(clearIcon);
+        });
     }
 
     // -----------------------------------------------------------------------------------------------------------------

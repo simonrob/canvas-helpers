@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-22'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-02-26'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import datetime
@@ -256,11 +256,6 @@ class GroupResponseProcessor:
                 'quiz[assignment_group_id]': assignment_group_id,
                 'quiz[only_visible_to_overrides]': True
             }
-            if args.setup_quiz_available_from:
-                quiz_configuration['quiz[unlock_at]'] = args.setup_quiz_available_from
-            if args.setup_quiz_due_at:
-                quiz_configuration['quiz[due_at]'] = args.setup_quiz_due_at
-                quiz_configuration['quiz[lock]'] = args.setup_quiz_due_at
 
             if args.dry_run:
                 print('\tDRY RUN: skipping creation of new quiz:', quiz_configuration['quiz[title]'])
@@ -355,7 +350,7 @@ class GroupResponseProcessor:
                 access_override_configuration['assignment_override[unlock_at]'] = args.setup_quiz_available_from
             if args.setup_quiz_due_at:
                 access_override_configuration['assignment_override[due_at]'] = args.setup_quiz_due_at
-                access_override_configuration['assignment_override[lock]'] = args.setup_quiz_due_at
+                access_override_configuration['assignment_override[lock_at]'] = args.setup_quiz_due_at
             if args.dry_run:
                 print('\tDRY RUN: skipping quiz access configuration for Canvas users:', current_group_canvas_ids)
             else:
@@ -519,7 +514,8 @@ class GroupResponseProcessor:
         assignment_list_response_json = json.loads(assignment_list_response)
         for quiz in assignment_list_response_json:
             quiz_id = quiz['quiz_id']
-            print('\nFound quiz ID', quiz_id, '-', quiz['name'], 'with assignment ID', quiz['id'])
+            print('\nFound quiz ID', quiz_id, '-', quiz['name'], 'with assignment ID', quiz['id'], 'due at',
+                  quiz['due_at'])
 
             current_group = int(quiz['name'].split('[')[-1].rstrip(']').split(' ')[-1])
             valid_members = [g['student_number'] for g in groups[current_group]]
@@ -587,6 +583,17 @@ class GroupResponseProcessor:
                     print('\t\tWARNING: skipping unexpected form from student not in current group', current_rater)
                     invalid.append(current_rater)
                     continue
+                if submission_summary['workflow_state'] not in ['complete', 'graded']:
+                    print('\t\tWARNING: skipping empty or partly-complete form from', current_rater, '-',
+                          submission_summary)
+                    invalid.append(current_rater)
+                    continue
+                if (datetime.datetime.strptime(submission_summary['submitted_at'], TIMESTAMP_FORMAT) >
+                        datetime.datetime.strptime(quiz['due_at'], TIMESTAMP_FORMAT)):
+                    print('\t\tWARNING: skipping late rating submission from', current_rater, '- submitted at',
+                          submission_summary['submitted_at'], 'but due at', quiz['due_at'])
+                    invalid.append(current_rater)
+                    continue
                 print('\t\tFound submission from', current_rater_name, '- Canvas ID:', submission_from['id'],
                       '; student number:', current_rater)
 
@@ -602,7 +609,8 @@ class GroupResponseProcessor:
                     if history_entry['workflow_state'] in ['complete', 'graded'] and 'submission_data' in history_entry:
                         submission_answers = history_entry
                 if not submission_answers:
-                    print('\t\tWARNING: skipping empty or partly-complete quiz submission:', submission_summary)
+                    print('\t\tWARNING: skipping empty or partly-complete form from ', current_rater, '-',
+                          submission_summary)
                     invalid.append(current_rater)
                     continue
                 submission_answers = submission_summary['submission_history'][0]['submission_data']
@@ -773,7 +781,7 @@ response_summary_file = os.path.join(WORKING_DIRECTORY, 'webpa-response-summary.
 response_summary_workbook.save(response_summary_file)
 print('Processed', len(respondent_list), 'valid submissions of', len(respondent_list) + len(skipped_respondents),
       'total;', 'combined responses saved to', response_summary_file)
-print('Skipped', len(skipped_respondents), 'invalid or tampered submissions from:', skipped_respondents)
+print('Skipped', len(skipped_respondents), 'late, invalid or tampered submissions from:', skipped_respondents)
 
 # finally, shape original marks according to the summary file of group member ratings (using pandas for ease)
 data = pandas.read_excel(response_summary_file, dtype={'Rater': str, 'Subject': str})  # student number is a string

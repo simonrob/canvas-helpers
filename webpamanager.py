@@ -36,6 +36,7 @@ __version__ = '2024-02-28'  # ISO 8601 (YYYY-MM-DD)
 import argparse
 import datetime
 import json
+import math
 import os
 import random
 import re
@@ -382,7 +383,7 @@ class GroupResponseProcessor:
             output_count += 1
 
         if args.setup_quiz_export_links:
-            quiz_link_file = os.path.join(WORKING_DIRECTORY, 'webpa-response-summary.xlsx')
+            quiz_link_file = os.path.join(WORKING_DIRECTORY, '%s.xlsx' % args.quiz_group_name)
             print('%s quiz links to' % ('DRY RUN: skipping saving' if args.dry_run else 'Saving'), quiz_link_file)
             if not args.dry_run:
                 quiz_link_workbook.save(quiz_link_file)
@@ -870,7 +871,8 @@ except pandas.errors.IntCastingNaNError:
           'you correctly named groups in the `--marks-file` provided? (Note that group names must *exactly* match the',
           'names used on Canvas)')
     raise
-response_data['Scaled'] = response_data.apply(lambda x: 'Y' if x['Original'] != x['Mark'] else '', axis=1)
+response_data['Scaled'] = response_data.apply(
+    lambda x: 'Y' if not math.isclose(x['Original'], x['Weighted'], abs_tol=0.00001) else '', axis=1)
 if args.context_summaries:
     response_data['Errors'] = pandas.NA
     response_data['Comment'] = pandas.NA

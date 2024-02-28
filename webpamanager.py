@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-26'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-02-28'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import datetime
@@ -69,12 +69,12 @@ def get_args():
                         help='The location to use for processing and output. The script will work in a subfolder of '
                              'this directory that is named as the Canvas group set ID. When `--setup` mode is '
                              'activated and set to `spreadsheet` the given subfolder will be created by the script, '
-                             '(it should not already exist). When `--setup` is set to `quiz`, this option has no '
-                             'effect. When `--setup` is not specified, the use of spreadsheets is assumed, and this '
-                             'subfolder should contain the individual student responses to the WebPA exercise, named '
-                             'as [student number].xlsx (missing files will be treated as non-respondents). Note: see '
-                             '`--quiz-group-name` for processing quiz responses. Default: the same directory as this '
-                             'script')
+                             '(it should not already exist). When `--setup` is set to `quiz`, this is only required if '
+                             '`--setup-quiz-export-links` is set. When `--setup` is not specified, the use of '
+                             'spreadsheets is assumed, and this subfolder should contain the individual student '
+                             'responses to the WebPA exercise, named as [student number].xlsx (missing files will be '
+                             'treated as non-respondents). Note: see `--quiz-group-name` for processing quiz '
+                             'responses. Default: the same directory as this script')
     parser.add_argument('--setup', default=None,
                         help='When this parameter is set to `quiz`, the script will create Canvas quizzes to be '
                              'completed by group members to rate their peers\' contributions. If set to `spreadsheet`, '
@@ -105,6 +105,10 @@ def get_args():
                             help='The date/time at which WebPA quiz responses should be due. This value should be '
                                  'specified as a timezone string - for example: %s. If not set, the quiz has no due '
                                  'date' % parser_example_date)
+    group_quiz.add_argument('--setup-quiz-export-links', action='store_true',
+                            help='If set, the links to each contribution quiz will be exported to a spreadsheet named'
+                                 '[`--quiz-group-name` value].xlsx in `--working-directory` (useful for example if '
+                                 'messaging groups separately outside of this scriptz\'s operation)')
 
     group_spreadsheet = parser.add_argument_group(title='Spreadsheet setup. The following options only apply when '
                                                         '`--setup` mode is activated and set to `spreadsheet`')
@@ -225,6 +229,13 @@ class GroupResponseProcessor:
         assignment_group_name = args.quiz_group_name if args.quiz_group_name else '%s [%s]' % (
             WEBPA_QUIZ_GROUP, datetime.datetime.now(datetime.UTC).strftime(TIMESTAMP_FORMAT))
         assignment_group_id = GroupResponseProcessor.get_assignment_group_id(assignment_group_name)
+
+        # for ease, we build the quiz link list every time, and just don't save it if not required
+        quiz_link_workbook = openpyxl.Workbook()
+        quiz_link_workbook_sheet = quiz_link_workbook.active
+        quiz_link_workbook_sheet.title = 'WebPA quiz links'
+        quiz_link_workbook_sheet.freeze_panes = 'A2'  # set the first row as a header
+        quiz_link_workbook_sheet.append(['Group name', 'Quiz link'])
 
         if assignment_group_id:
             print('Found existing assignment group:', assignment_group_name, 'with ID:', assignment_group_id)
@@ -363,9 +374,18 @@ class GroupResponseProcessor:
                 print('\tConfigured quiz access for Canvas users', current_group_canvas_ids)
 
             if not args.dry_run:
-                print('\tFinished configuring quiz at %s/quizzes/%s' % (
-                    COURSE_URL.replace('/api/v1', ''), current_quiz_id))
+                quiz_link = '%s/quizzes/%s' % (COURSE_URL.replace('/api/v1', ''), current_quiz_id)
+                quiz_link_workbook_sheet.append([groups[group_key][0]['group_name'], quiz_link])
+                print('\tFinished configuring quiz at', quiz_link)
+                if args.setup_quiz_export_links:
+                    pass
             output_count += 1
+
+        if args.setup_quiz_export_links:
+            quiz_link_file = os.path.join(WORKING_DIRECTORY, 'webpa-response-summary.xlsx')
+            print('%s quiz links to' % ('DRY RUN: skipping saving' if args.dry_run else 'Saving'), quiz_link_file)
+            if not args.dry_run:
+                quiz_link_workbook.save(quiz_link_file)
 
         print('Finished processing', output_count, 'groups')
         return
@@ -693,7 +713,7 @@ class GroupResponseProcessor:
             quiz_id = quiz['quiz_id']
             print('Found quiz ID', quiz_id, '-', quiz['name'], 'with assignment ID', quiz['id'])
 
-            if not deletion_confirmed:
+            if not args.dry_run and not deletion_confirmed:
                 print()
                 # noinspection SpellCheckingInspection
                 if input('Confirm deleting quiz "%s" and all others in course%s,\nassignment group "%s" '
@@ -712,7 +732,8 @@ class GroupResponseProcessor:
             else:
                 print('\tWARNING: unable to delete assignment at %s:' % quiz_deletion_url,
                       quiz_deletion_response.text, '-', quiz)
-        print('Deleted', len(assignment_list_response_json), 'quiz assignments in group', quiz_group_name)
+        print('DRY RUN: would delete' if args.dry_run else 'Deleted', len(assignment_list_response_json),
+              'quiz assignments in group', quiz_group_name)
 
 
 args = Args.interactive(get_args)
@@ -735,7 +756,7 @@ WORKING_DIRECTORY = os.path.join(working_directory, str(group_id))
 if args.setup and args.setup == 'spreadsheet' and os.path.exists(WORKING_DIRECTORY):
     print('ERROR: WebPA setup output directory', WORKING_DIRECTORY, 'already exists - please remove or rename')
     sys.exit()
-if not (args.setup and args.setup == 'quiz'):
+if not (args.setup and args.setup == 'quiz' and not args.setup_quiz_export_links):
     os.makedirs(WORKING_DIRECTORY, exist_ok=True)
 
 # setup mode - generate empty templates, either personalised per student or general per group

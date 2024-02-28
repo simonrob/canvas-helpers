@@ -105,8 +105,9 @@ If you don't already have a UserScript extension, the following options are reco
 Once you have a UserScript extension, click a script's name in the list below to install it:
 - [Canvas helpers](https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js): Currently, the script does the following:
    - Reduce the size of the homepage cards to allow more courses to be displayed at once
-   - Sort groups by name/number in the assignment selection box
    - Reduce extra spacing around list items in various places within courses
+   - Remove the courses popout and just go straight to the courses list
+   - Add a button to clear all todo items at once
 
 - [Sort the roster](https://github.com/simonrob/canvancement/raw/sort-roster/roster/sort-roster/sort-roster.user.js): A slightly enhanced version of an [original script](https://github.com/jamesjonesmath/canvancement/tree/master/roster/sort-roster) by James Jones that allows the Canvas People pages to be sorted, and automatically loads all members of a course.
 James' [Canvancement project](https://github.com/jamesjonesmath/canvancement) is well worth exploring for a wide range of other useful scripts.

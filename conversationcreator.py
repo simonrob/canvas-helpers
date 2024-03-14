@@ -4,7 +4,7 @@ include a unique attachment file."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-20'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-03-14'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import csv
@@ -144,7 +144,7 @@ if args.comments_file:
                 reader = csv.reader(marks_csv)
                 for row in reader:
                     comments_map[row[0]] = row[1]
-        print('Loaded comments mapping for', len(comments_map), 'people:', comments_map)
+        print('Loaded comments mapping for', len(comments_map), 'people/groups:', comments_map)
     else:
         print('Ignoring comments file argument', args.comments_file, '- not found in course directory at',
               comments_file)

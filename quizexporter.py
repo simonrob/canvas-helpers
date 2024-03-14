@@ -8,7 +8,7 @@ limitation, exporting all responses to a single spreadsheet."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-03-14'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -37,7 +37,13 @@ def get_args():
 args = Args.interactive(get_args)
 config_settings = Config.get_settings()
 LTI_INSTITUTION_SUBDOMAIN = config_settings['lti_institution_subdomain']
+if LTI_INSTITUTION_SUBDOMAIN.startswith('*** your'):
+    print('WARNING: lti_institution_subdomain seems to contain the example value - please make sure you have added',
+          'your own subdomain')
 LTI_BEARER_TOKEN = config_settings['lti_bearer_token']
+if LTI_BEARER_TOKEN.startswith('*** your'):
+    print('WARNING: lti_bearer_token seems to contain the example value - please make sure you have added your own',
+          'token')
 ROOT_INSTRUCTURE_DOMAIN = 'https://%s.quiz-%s-dub-prod.instructure.com/api'
 LTI_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'lti')
 QUIZ_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'api')

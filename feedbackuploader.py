@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-20'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-03-14'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -52,8 +52,8 @@ def get_args():
     parser.add_argument('--attachment-comment', default=DEFAULT_COMMENT,
                         help='The comment to add when attaching the feedback file. Overridden by any individual '
                              'comments in the imported marks file. The default value (\'%s\') will be skipped if there '
-                             'is no attachment, but in all other cases the comment will be added regardless' %
-                             DEFAULT_COMMENT)
+                             'is no attachment, but in all other cases the comment will be added regardless. Use \\n '
+                             'for linebreaks (both here and in comments provided via a spreadsheet)' % DEFAULT_COMMENT)
     parser.add_argument('--groups', action='store_true',
                         help='Use this option if the assignment is completed in groups and all members should receive '
                              'the same mark and feedback. If you use this option, group names must be used instead of '
@@ -176,7 +176,7 @@ for submission in filtered_submission_list:
     submission_count += 1
     submitter = Utils.get_submitter_details(ASSIGNMENT_URL, submission, groups_mode=args.groups)
     if not submitter:
-        print('WARNING: submitter details not found for submission; skipping:', submission)
+        print('\nWARNING: submitter details not found for submission; skipping:', submission)
         continue
 
     print('\nProcessing submission', submission_count, 'of', submission_total, 'from', submitter)
@@ -187,6 +187,10 @@ for submission in filtered_submission_list:
     attachment_path = os.path.join(INPUT_DIRECTORY, attachment_file)
     attachment_mime_type = args.attachment_mime_type or mimetypes.guess_type(attachment_path)[0]
     attachment_exists = os.path.exists(attachment_path)
+
+    if args.groups and (submitter['group_name'] is None or feedback_identifier is None):
+        # in `--include-unsubmitted` mode, submissions that have with no content of any form (document, comment, etc)
+        print('WARNING: found group member with empty group name or ID')
 
     if attachment_exists and attachment_mime_type:
         print('Found submission attachment file', attachment_file, 'with MIME type', attachment_mime_type)
@@ -200,9 +204,10 @@ for submission in filtered_submission_list:
             print('Found individual group member submission attachment file', attachment_file, 'with MIME type',
                   attachment_mime_type)
         else:
-            print('Both group (%s.%s)' % (submitter['group_name'], args.attachment_extension),
-                  'and individual (%s)' % attachment_file, 'attachment at %s' % os.path.dirname(attachment_path),
-                  'were not found or are not of a recognised MIME type; skipping upload for this submission')
+            print('Both group %s' % ('(no group name found)' if not feedback_identifier else '(%s.%s)' % (
+                submitter['group_name'], args.attachment_extension)), 'and individual (%s)' % attachment_file,
+                  'attachment at %s' % os.path.dirname(attachment_path), 'were not found or are not of a recognised',
+                  'MIME type; skipping upload for this submission')
             attachment_file = None
     else:
         print('Attachment %s at %s' % (attachment_file, os.path.dirname(attachment_path)),

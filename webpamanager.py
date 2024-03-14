@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-28'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-03-14'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import datetime
@@ -364,7 +364,8 @@ class GroupResponseProcessor:
                 access_override_configuration['assignment_override[due_at]'] = args.setup_quiz_due_at
                 access_override_configuration['assignment_override[lock_at]'] = args.setup_quiz_due_at
             if args.dry_run:
-                print('\tDRY RUN: skipping quiz access configuration for Canvas users:', current_group_canvas_ids)
+                print('\tDRY RUN: skipping quiz access configuration for Canvas users:', current_group_canvas_ids,
+                      'available from', args.setup_quiz_available_from, 'and due at', args.setup_quiz_due_at)
             else:
                 access_override_response = requests.post(
                     '%s/assignments/%s/overrides' % (COURSE_URL, current_quiz_assignment_id),
@@ -372,7 +373,8 @@ class GroupResponseProcessor:
                 if access_override_response.status_code != 201:  # note 201 Created not 200 OK
                     print('\tERROR: unable to configure quiz access for Canvas users', current_group_canvas_ids, ':',
                           access_override_response.text, '- aborting')
-                print('\tConfigured quiz access for Canvas users', current_group_canvas_ids)
+                print('\tConfigured quiz access for Canvas users', current_group_canvas_ids, 'available from',
+                      args.setup_quiz_available_from, 'and due at', args.setup_quiz_due_at)
 
             if not args.dry_run:
                 quiz_link = '%s/quizzes/%s' % (COURSE_URL.replace('/api/v1', ''), current_quiz_id)
@@ -609,10 +611,11 @@ class GroupResponseProcessor:
                           submission_summary)
                     invalid.append(current_rater)
                     continue
+                due_date = quiz['due_at'] or submission_summary['cached_due_date']  # date is oddly sometimes missing
                 if (datetime.datetime.strptime(submission_summary['submitted_at'], TIMESTAMP_FORMAT) >
-                        datetime.datetime.strptime(quiz['due_at'], TIMESTAMP_FORMAT)):
+                        datetime.datetime.strptime(due_date, TIMESTAMP_FORMAT)):
                     print('\t\tWARNING: skipping late rating submission from', current_rater, '- submitted at',
-                          submission_summary['submitted_at'], 'but due at', quiz['due_at'])
+                          submission_summary['submitted_at'], 'but due at', due_date)
                     invalid.append(current_rater)
                     continue
                 print('\t\tFound submission from', current_rater_name, '- Canvas ID:', submission_from['id'],

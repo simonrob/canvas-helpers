@@ -41,6 +41,7 @@ import os
 import random
 import re
 import sys
+import uuid
 
 # noinspection PyPackageRequirements
 import numpy  # NumPy is a Pandas dependency, so guaranteed to be present because we require Pandas (below)
@@ -52,7 +53,7 @@ import requests
 
 from canvashelpers import Args, Utils, Config
 
-TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%SZ'  # e.g., '2024-12-31T13:30:00Z'
+TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S'  # e.g., '2024-12-31T13:30:00'
 
 WEBPA_HEADERS = ['Respondent', 'Person', 'Student №', 'Rating', 'Comments (optional)', 'Group №']
 WEBPA_QUIZ_GROUP = 'Group contribution (WebPA)'
@@ -68,36 +69,37 @@ def get_args():
                              'so it is worth opening the desired group in a new window to be sure')
     parser.add_argument('--working-directory', default=None,
                         help='The location to use for processing and output. The script will work in a subfolder of '
-                             'this directory that is named as the Canvas group set ID. When `--setup` mode is '
-                             'activated and set to `spreadsheet` the given subfolder will be created by the script, '
-                             '(it should not already exist). When `--setup` is set to `quiz`, this is only required if '
-                             '`--setup-quiz-export-links` is set. When `--setup` is not specified, the use of '
-                             'spreadsheets is assumed, and this subfolder should contain the individual student '
-                             'responses to the WebPA exercise, named as [student number].xlsx (missing files will be '
-                             'treated as non-respondents). Note: see `--quiz-group-name` for processing quiz '
-                             'responses. Default: the same directory as this script')
+                             'this directory that is named as the Canvas group set ID (see `group` parameter). When '
+                             '`--setup` mode is activated and set to `spreadsheet` the given subfolder will be created '
+                             'by the script (it should not already exist). When `--setup` is set to `quiz` or '
+                             '`newquiz`, this parameter is only required if `--setup-quiz-export-links` is set. When '
+                             '`--setup` is not specified, the use of spreadsheets is assumed, and this subfolder '
+                             'should contain the individual student responses to the WebPA exercise, named as [student '
+                             'number].xlsx (missing files will be treated as non-respondents). Note: see `--quiz-group'
+                             '-name` for processing quiz responses. Default: the same directory as this script')
     parser.add_argument('--setup', default=None,
-                        help='When this parameter is set to `quiz`, the script will create Canvas quizzes to be '
-                             'completed by group members to rate their peers\' contributions. If set to `spreadsheet`, '
-                             'the script will generate empty WebPA forms to be distributed to group members (via, '
-                             'e.g., the `conversationcreator` script). If this parameter is not set, the script will '
-                             'look for group members\' responses (searching in `--working-directory`; or, '
-                             'alternatively, if `--quiz-group-name` is set, the named Canvas assignment group)')
+                        help='When this parameter is set to `quiz` or `newquiz`, the script will create Canvas quizzes '
+                             '(Classic or New, respectively) to be completed by group members to rate their peers\' '
+                             'contributions. If set to `spreadsheet`, the script will generate empty WebPA forms to be '
+                             'distributed to group members (via, e.g., the `conversationcreator` script). If this '
+                             'parameter is not set, the script will look for group members\' responses (searching in '
+                             '`--working-directory`; or, alternatively, if `--quiz-group-name` is set, the named '
+                             'Canvas assignment group)')
     parser.add_argument('--quiz-group-name', default=None,
                         help='When `--setup` mode is not specified, setting this parameter causes the script to look '
                              'for a Canvas assignment group with this name to load individual quizzes and responses '
-                             'from. When `--setup` mode is activated and set to `quiz`, this is the name of the '
-                             'assignment group to place the generated quizzes within. If this parameter is not set, '
-                             'the default name is `%s [current date/time]. In either case, if the assignment group '
-                             'does not exist, it will be created. Note that *all* existing quizzes in the assignment '
-                             'group will be assumed to be part of the current WebPA process, so if the process is to '
-                             'be run multiple times (i.e., for different assignments), different group names should be '
-                             'used. This parameter has no effect when `--setup` mode is activated and set to '
-                             '`spreadsheet`' % WEBPA_QUIZ_GROUP)
+                             'from. When `--setup` mode is activated and set to `quiz` or `newquiz`, this is the name '
+                             'of the assignment group to place the generated quizzes within. If this parameter is not '
+                             'set, the default name is `%s [current date/time]. In either case, if the assignment '
+                             'group does not exist, it will be created. Note that *all* existing quizzes in the '
+                             'assignment group will be assumed to be part of the current WebPA process, so if the '
+                             'process is to be run multiple times (i.e., for different assignments), different group '
+                             'names should be used. This parameter has no effect when `--setup` mode is activated and '
+                             'set to `spreadsheet`' % WEBPA_QUIZ_GROUP)
 
     group_quiz = parser.add_argument_group(title='Quiz setup (see `canvashelpers.config` for additional '
                                                  'configuration). The following options only apply when `--setup` '
-                                                 'mode is activated and set to `quiz`')
+                                                 'mode is activated and set to `quiz` or `newquiz`')
     group_quiz.add_argument('--setup-quiz-available-from', default=None,
                             help='The date/time from which the WebPA quiz should be made available to respondents. '
                                  'This value should be specified as a timezone string - for example: %s. If not set, '
@@ -222,14 +224,9 @@ class GroupResponseProcessor:
         print('Successfully generated', output_count, 'WebPA forms to', WORKING_DIRECTORY)
 
     @staticmethod
-    def setup_quizzes(groups):
+    def setup_quizzes(groups, assignment_group_id):
         # the quiz can be customised in the canvashelpers.config file
         config_settings = Config.get_settings()
-
-        # we need an assignment group to place the quizzes in (which we also use later for retrieval)
-        assignment_group_name = args.quiz_group_name if args.quiz_group_name else '%s [%s]' % (
-            WEBPA_QUIZ_GROUP, datetime.datetime.now(datetime.UTC).strftime(TIMESTAMP_FORMAT))
-        assignment_group_id = GroupResponseProcessor.get_assignment_group_id(assignment_group_name)
 
         # for ease, we build the quiz link list every time, and just don't save it if not required
         quiz_link_workbook = openpyxl.Workbook()
@@ -238,34 +235,16 @@ class GroupResponseProcessor:
         quiz_link_workbook_sheet.freeze_panes = 'A2'  # set the first row as a header
         quiz_link_workbook_sheet.append(['Group name', 'Quiz link'])
 
-        if assignment_group_id:
-            print('Found existing assignment group:', assignment_group_name, 'with ID:', assignment_group_id)
-        else:
-            print('Existing assignment group not found; creating new group:', assignment_group_name)
-            if args.dry_run:
-                print('\tDRY RUN: skipping creation of new assignment group')
-                assignment_group_id = -1
-            else:
-                group_creation_response = requests.post('%s/assignment_groups' % COURSE_URL,
-                                                        data={'name': assignment_group_name},
-                                                        headers=Utils.canvas_api_headers())
-                if group_creation_response.status_code != 200:
-                    print('\tERROR: unable to create assignment group; aborting')
-                    sys.exit()
-
-                assignment_group_id = group_creation_response.json()['id']
-                print('\tCreated new assignment group with ID', assignment_group_id)
-
         output_count = 0
         for group_key in sorted(groups):
             # each group has a separate quiz that is only accessible to that group's members
-            print('Creating WebPA quiz for student group', group_key, '(%s members)' % len(groups[group_key]))
+            print('\nCreating WebPA quiz for student group', group_key, '(%s members)' % len(groups[group_key]))
             quiz_configuration = {
                 'quiz[title]': '%s [%s]' % (config_settings['webpa_quiz_title'], groups[group_key][0]['group_name']),
                 'quiz[description]': config_settings['webpa_quiz_description'],
                 'quiz[quiz_type]': 'graded_survey',
-                'quiz[show_correct_answers]': 'false',  # note: must be a string not a boolean
                 'quiz[assignment_group_id]': assignment_group_id,
+                'quiz[show_correct_answers]': 'false',  # note: must be a string not a boolean
                 'quiz[only_visible_to_overrides]': True
             }
 
@@ -357,24 +336,7 @@ class GroupResponseProcessor:
 
             # finally, configure access so that only this group's members can see and respond to this particular quiz
             current_group_canvas_ids = [student['student_canvas_id'] for student in groups[group_key]]
-            access_override_configuration = {'assignment_override[student_ids][]': current_group_canvas_ids}
-            if args.setup_quiz_available_from:
-                access_override_configuration['assignment_override[unlock_at]'] = args.setup_quiz_available_from
-            if args.setup_quiz_due_at:
-                access_override_configuration['assignment_override[due_at]'] = args.setup_quiz_due_at
-                access_override_configuration['assignment_override[lock_at]'] = args.setup_quiz_due_at
-            if args.dry_run:
-                print('\tDRY RUN: skipping quiz access configuration for Canvas users:', current_group_canvas_ids,
-                      'available from', args.setup_quiz_available_from, 'and due at', args.setup_quiz_due_at)
-            else:
-                access_override_response = requests.post(
-                    '%s/assignments/%s/overrides' % (COURSE_URL, current_quiz_assignment_id),
-                    data=access_override_configuration, headers=Utils.canvas_api_headers())
-                if access_override_response.status_code != 201:  # note 201 Created not 200 OK
-                    print('\tERROR: unable to configure quiz access for Canvas users', current_group_canvas_ids, ':',
-                          access_override_response.text, '- aborting')
-                print('\tConfigured quiz access for Canvas users', current_group_canvas_ids, 'available from',
-                      args.setup_quiz_available_from, 'and due at', args.setup_quiz_due_at)
+            GroupResponseProcessor.configure_quiz_access(current_quiz_assignment_id, current_group_canvas_ids)
 
             if not args.dry_run:
                 quiz_link = '%s/quizzes/%s' % (COURSE_URL.replace('/api/v1', ''), current_quiz_id)
@@ -394,6 +356,188 @@ class GroupResponseProcessor:
         return
 
     @staticmethod
+    def setup_new_quizzes(groups, assignment_group_id):
+        # the quiz can be customised in the canvashelpers.config file
+        config_settings = Config.get_settings()
+
+        # for ease, we build the quiz link list every time, and just don't save it if not required
+        quiz_link_workbook = openpyxl.Workbook()
+        quiz_link_workbook_sheet = quiz_link_workbook.active
+        quiz_link_workbook_sheet.title = 'WebPA new quiz links'
+        quiz_link_workbook_sheet.freeze_panes = 'A2'  # set the first row as a header
+        quiz_link_workbook_sheet.append(['Group name', 'New quiz link'])
+
+        output_count = 0
+        for group_key in sorted(groups):
+            # each group has a separate quiz that is only accessible to that group's members
+            print('\nCreating WebPA new quiz for student group', group_key, '(%s members)' % len(groups[group_key]))
+            quiz_configuration = {
+                'quiz[title]': '%s [%s]' % (config_settings['webpa_quiz_title'], groups[group_key][0]['group_name']),
+                'quiz[instructions]': config_settings['webpa_quiz_description'],
+                'quiz[assignment_group_id]': assignment_group_id,
+                'quiz[quiz_settings][result_view_settings][result_view_restricted]': True,  # note documentation typo
+                'quiz[quiz_settings][result_view_settings][display_points_awarded]': 'false',  # note: must be a string
+                'quiz[quiz_settings][result_view_settings][display_points_possible]': 'false',
+                'quiz[quiz_settings][result_view_settings][display_items]': 'false'
+            }
+
+            if args.dry_run:
+                print('\tDRY RUN: skipping creation of new quiz:', quiz_configuration['quiz[title]'])
+                current_quiz_id = -1
+            else:
+                quiz_creation_response = requests.post('%s/quizzes' % GroupResponseProcessor.new_quiz_api(COURSE_URL),
+                                                       data=quiz_configuration, headers=Utils.canvas_api_headers())
+                if quiz_creation_response.status_code != 200:
+                    print('\tERROR: unable to create new quiz for group', group_key, ':', quiz_creation_response.text,
+                          '- aborting')
+                    sys.exit()
+
+                quiz_creation_response_json = quiz_creation_response.json()
+                current_quiz_id = quiz_creation_response_json['id']
+                print('\tCreated new quiz', quiz_configuration['quiz[title]'], '- ID', current_quiz_id)
+
+            # each member has a separate contribution question
+            question_position = 0
+            for member_id, group_member in enumerate(groups[group_key]):
+                student_description = '%s (%s)' % (group_member['student_name'], group_member['student_number'])
+                question_position = member_id + 1  # uses 1-based indexing
+                quiz_question_configuration = {
+                    'item': {
+                        'entry_type': 'Item',
+                        'position': question_position,
+                        'entry': {
+                            'interaction_type_slug': 'choice',
+                            'title': group_member['student_number'],
+                            'item_body': config_settings['webpa_rating_question_body'].replace('{group member}',
+                                                                                               student_description),
+                        }
+                    }
+                }
+
+                answer_uuid = None
+                interaction_data = []
+                for i in range(5):
+                    answer_uuid = str(uuid.uuid4())
+                    interaction_data.append({
+                        'id': answer_uuid,
+                        'position': i + 1,
+                        'itemBody': config_settings['webpa_rating_question_choice_%d' % (i + 1)]
+                    })
+                quiz_question_configuration['item']['entry']['interaction_data'] = {'choices': interaction_data}
+                quiz_question_configuration['item']['entry']['scoring_algorithm'] = 'Equivalence'
+                quiz_question_configuration['item']['entry']['scoring_data'] = {'value': answer_uuid}
+
+                if args.dry_run:
+                    print('\tDRY RUN: skipping creation of new quiz question:',
+                          quiz_question_configuration['question[question_name]'])
+                else:
+                    quiz_question_response = requests.post(
+                        '%s/quizzes/%s/items' % (GroupResponseProcessor.new_quiz_api(COURSE_URL), current_quiz_id),
+                        json=quiz_question_configuration, headers=Utils.canvas_api_headers())
+                    if quiz_question_response.status_code != 200:
+                        print('\tERROR: unable to create question',
+                              quiz_question_configuration['item']['entry']['title'], 'for quiz:',
+                              quiz_question_response.text)
+                        sys.exit()
+                    print('\tCreated new quiz question:', quiz_question_configuration['item']['entry']['title'])
+
+            # at the end we ask for any general comments - in most cases these are not used, but students often like to
+            # be able to provide this (note: if left empty Canvas warns the student, hence the prompt to enter "None")
+            quiz_question_configuration = {
+                'item[entry_type]': 'Item',
+                'item[position]': question_position + 1,
+                'item[entry][interaction_type_slug]': 'essay',
+                'item[entry][title]': 'Comments (optional)',  # not currently customisable as Canvas hides this
+                'item[entry][item_body]': config_settings['webpa_comment_question_description'],
+                'item[entry][interaction_data][rce]': 'false',  # note: must be a string not a boolean
+                'item[entry][scoring_algorithm]': 'None',
+                'item[entry][scoring_data][value]': ''
+            }
+
+            if args.dry_run:
+                print('\tDRY RUN: skipping creation of general comments new quiz question:',
+                      quiz_question_configuration['question[question_name]'])
+            else:
+                quiz_question_response = requests.post(
+                    '%s/quizzes/%s/items' % (GroupResponseProcessor.new_quiz_api(COURSE_URL), current_quiz_id),
+                    data=quiz_question_configuration,
+                    headers=Utils.canvas_api_headers())
+                if quiz_question_response.status_code != 200:
+                    print('\tERROR: unable to create general comments question',
+                          quiz_question_configuration['item[entry][title]'], 'for quiz:',
+                          quiz_question_response.text)
+                    sys.exit()
+                print('\tCreated general comments new quiz question:',
+                      quiz_question_configuration['item[entry][title]'])
+
+            # publish via the assignments (rather than New Quizzes) API
+            assignment_configuration = {
+                'assignment[published]': True,
+                'assignment[only_visible_to_overrides]': True,
+                'assignment[omit_from_final_grade]': True,
+                'assignment[hide_in_gradebook]': True
+            }
+            if args.dry_run:
+                print('\tDRY RUN: skipping update push for new quiz', quiz_configuration['quiz[title]'])
+            else:
+                quiz_update_response = requests.put('%s/assignments/%s' % (COURSE_URL, current_quiz_id),
+                                                    data=assignment_configuration, headers=Utils.canvas_api_headers())
+                if quiz_update_response.status_code != 200:
+                    print('\tERROR: unable to update new quiz', quiz_configuration['quiz[title]'], ':',
+                          quiz_update_response.text, '- aborting')
+                    sys.exit()
+                print('\tPushed update for new quiz', quiz_configuration['quiz[title]'])
+
+            # finally, configure access so that only this group's members can see and respond to this particular quiz
+            current_group_canvas_ids = [student['student_canvas_id'] for student in groups[group_key]]
+            GroupResponseProcessor.configure_quiz_access(current_quiz_id, current_group_canvas_ids)
+
+            if not args.dry_run:
+                quiz_link = '%s/assignments/%s' % (COURSE_URL.replace('/api/v1', ''), current_quiz_id)
+                quiz_link_workbook_sheet.append([groups[group_key][0]['group_name'], quiz_link])
+                print('\tFinished configuring new quiz at', quiz_link)
+                if args.setup_quiz_export_links:
+                    pass
+            output_count += 1
+
+            sys.exit()
+
+        if args.setup_quiz_export_links:
+            quiz_link_file = os.path.join(WORKING_DIRECTORY, '%s.xlsx' % args.quiz_group_name)
+            print('%s new quiz links to' % ('DRY RUN: skipping saving' if args.dry_run else 'Saving'), quiz_link_file)
+            if not args.dry_run:
+                quiz_link_workbook.save(quiz_link_file)
+
+        print('Finished processing', output_count, 'groups')
+        return
+
+    @staticmethod
+    def new_quiz_api(original_api_url):
+        return original_api_url.replace('/api/v1/', '/api/quiz/v1/')  # hosted in a different location, bizarrely
+
+    @staticmethod
+    def configure_quiz_access(current_quiz_id, current_group_canvas_ids):
+        access_override_configuration = {'assignment_override[student_ids][]': current_group_canvas_ids}
+        if args.setup_quiz_available_from:
+            access_override_configuration['assignment_override[unlock_at]'] = args.setup_quiz_available_from
+        if args.setup_quiz_due_at:
+            access_override_configuration['assignment_override[due_at]'] = args.setup_quiz_due_at
+            access_override_configuration['assignment_override[lock_at]'] = args.setup_quiz_due_at
+        if args.dry_run:
+            print('\tDRY RUN: skipping quiz assignment access configuration for Canvas users:',
+                  current_group_canvas_ids, 'available from', args.setup_quiz_available_from, 'and due at',
+                  args.setup_quiz_due_at)
+        else:
+            access_override_response = requests.post(
+                '%s/assignments/%s/overrides' % (COURSE_URL, current_quiz_id),
+                data=access_override_configuration, headers=Utils.canvas_api_headers())
+            if access_override_response.status_code != 201:  # note 201 Created not 200 OK
+                print('\tERROR: unable to configure quiz assignment access for Canvas users', current_group_canvas_ids,
+                      ':', access_override_response.text, '- aborting')
+            print('\tConfigured quiz assignment access for Canvas users', current_group_canvas_ids, 'available from',
+                  args.setup_quiz_available_from, 'and due at', args.setup_quiz_due_at)
+
+    @staticmethod
     def get_assignment_group_id(group_name):
         assignment_group_response = requests.get('%s/assignment_groups' % COURSE_URL,
                                                  headers=Utils.canvas_api_headers())
@@ -405,6 +549,17 @@ class GroupResponseProcessor:
         for group_properties in assignment_group_response_json:
             if group_properties['name'] == group_name:
                 return group_properties['id']
+
+    @staticmethod
+    def create_assignment_group(new_group_name):
+        group_creation_response = requests.post('%s/assignment_groups' % COURSE_URL,
+                                                data={'name': new_group_name},
+                                                headers=Utils.canvas_api_headers())
+        if group_creation_response.status_code != 200:
+            print('\tERROR: unable to create assignment group; aborting')
+            sys.exit()
+
+        return group_creation_response.json()['id']
 
     @staticmethod
     def get_spreadsheets(groups, summary_sheet):
@@ -536,6 +691,10 @@ class GroupResponseProcessor:
 
         assignment_list_response_json = json.loads(assignment_list_response)
         for quiz in assignment_list_response_json:
+            if 'quiz_id' not in quiz:
+                print('WARNING: found new quiz assignment that is not yet directly supported for WebPA analysis -',
+                      'skipping', quiz)
+                continue
             quiz_id = quiz['quiz_id']
             print('\nFound quiz ID', quiz_id, '-', quiz['name'], 'with assignment ID', quiz['id'], 'due at',
                   quiz['due_at'])
@@ -714,13 +873,18 @@ class GroupResponseProcessor:
         deletion_confirmed = False
         assignment_list_response_json = json.loads(assignment_list_response)
         for quiz in assignment_list_response_json:
-            quiz_id = quiz['quiz_id']
-            print('Found quiz ID', quiz_id, '-', quiz['name'], 'with assignment ID', quiz['id'])
+            if 'quiz_id' in quiz:
+                print('Found quiz ID', quiz['quiz_id'], '-', quiz['name'], 'with assignment ID', quiz['id'])
+            elif quiz['is_quiz_lti_assignment']:
+                print('Found new quiz', quiz['name'], 'with assignment ID', quiz['id'])
+            else:
+                print('Skipping non-quiz assignment', quiz)
+                continue
 
             if not args.dry_run and not deletion_confirmed:
                 print()
                 # noinspection SpellCheckingInspection
-                if input('Confirm deleting quiz "%s" and all others in course%s,\nassignment group "%s" '
+                if input('Confirm deleting quiz "%s" and all others in course %s,\nassignment group "%s" '
                          '(type yes or no) ' % (quiz['name'], COURSE_URL, quiz_group_name)).lower() != 'yes':
                     sys.exit('ERROR: aborting deletion; confirmation refused')
                 deletion_confirmed = True
@@ -765,8 +929,28 @@ if not (args.setup and args.setup == 'quiz' and not args.setup_quiz_export_links
 
 # setup mode - generate empty templates, either personalised per student or general per group
 if args.setup:
-    if args.setup == 'quiz':
-        GroupResponseProcessor.setup_quizzes(group_sets)
+    if args.setup in ['quiz', 'newquiz']:
+        # we need an assignment group to place the quizzes in (which we also use later for retrieval)
+        assignment_group_name = args.quiz_group_name if args.quiz_group_name else '%s [%s]' % (
+            WEBPA_QUIZ_GROUP, datetime.datetime.now(datetime.UTC).strftime(TIMESTAMP_FORMAT))
+        assignment_group_identifier = GroupResponseProcessor.get_assignment_group_id(assignment_group_name)
+        if assignment_group_identifier:
+            print('Found existing assignment group:', assignment_group_name, 'with ID:', assignment_group_identifier)
+        else:
+            print('Existing assignment group not found; creating new group:', assignment_group_name)
+            if args.dry_run:
+                print('\tDRY RUN: skipping creation of new assignment group')
+                assignment_group_identifier = -1
+            else:
+                assignment_group_identifier = GroupResponseProcessor.create_assignment_group(assignment_group_name)
+                print('\tCreated new assignment group with ID', assignment_group_identifier)
+
+        if args.setup == 'quiz':
+            GroupResponseProcessor.setup_quizzes(group_sets, assignment_group_identifier)
+        elif args.setup == 'newquiz':
+            print('WARNING: creation of New Quizzes is currently possible, but automatic analysis of responses is not',
+                  'yet supported. Using the standard `quiz` option is recommended for now.')  # TODO
+            GroupResponseProcessor.setup_new_quizzes(group_sets, assignment_group_identifier)
     elif args.setup == 'spreadsheet':
         GroupResponseProcessor.setup_spreadsheets(group_sets)
     else:

@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-03-14'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-04-04'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import datetime
@@ -606,7 +606,7 @@ class GroupResponseProcessor:
                     print('\t\tWARNING: skipping unexpected form from student not in current group', current_rater)
                     invalid.append(current_rater)
                     continue
-                if submission_summary['workflow_state'] not in ['complete', 'graded']:
+                if submission_summary['workflow_state'] not in ['complete', 'graded', 'pending_review']:
                     print('\t\tWARNING: skipping empty or partly-complete form from', current_rater, '-',
                           submission_summary)
                     invalid.append(current_rater)
@@ -633,7 +633,7 @@ class GroupResponseProcessor:
                     if history_entry['workflow_state'] in ['complete', 'graded'] and 'submission_data' in history_entry:
                         submission_answers = history_entry
                 if not submission_answers:
-                    print('\t\tWARNING: skipping empty or partly-complete form from ', current_rater, '-',
+                    print('\t\tWARNING: skipping unanswered or partly-complete form from ', current_rater, '-',
                           submission_summary)
                     invalid.append(current_rater)
                     continue

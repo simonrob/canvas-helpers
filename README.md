@@ -72,7 +72,7 @@ Note that the underlying limitations of the Canvas moderation features still app
 See `python moderationmanager.py --help` for further instructions.
 
 - [Quiz result exporter](quizexporter.py): When using quizzes as assignments that need review or processing of some form (rather than just predetermined correct/incorrect responses), the "New Quizzes" feature on Canvas is far worse than the old version, and–most importantly, for large class sizes–does not allow bulk response export.
-After significant community resistance, Canvas developers Instructure have now [relented](https://community.canvaslms.com/t5/New-Quizzes-Resources/Transparency-into-Quizzes-Planning/ta-p/502615) and may at some point implement this missing feature.
+After significant community resistance, Canvas developers Instructure have now [relented](https://community.canvaslms.com/t5/New-Quizzes-Resources/Transparency-into-Quizzes-Planning/ta-p/502615) and may at some point implement this missing feature (potentially scheduled for [late 2024](https://community.canvaslms.com/t5/New-Quizzes-Hub/ct-p/new_quizzes_hub)).
 In the meantime, this script allows you to export all quiz responses to an XLSX spreadsheet.
 Usage: `python quizexporter.py [assignment URL]`.
 See `python quizexporter.py --help` for additional options.

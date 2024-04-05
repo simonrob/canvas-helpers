@@ -80,12 +80,13 @@ user_session_ids = []
 for submission in submission_list_json:
     if 'external_tool_url' in submission:
         external_tool_url = submission['external_tool_url']
+        external_tool_url_parts = external_tool_url.split('.quiz-lti-dub-')
         user_session_ids.append({'user_id': submission['user_id'],
-                                 'link': external_tool_url.split('participant_session_id=')[1].split('&')[0]})
+                                 'session_id': external_tool_url.split('participant_session_id=')[1].split('&')[0]})
         if not LTI_INSTITUTION_SUBDOMAIN:
-            LTI_INSTITUTION_SUBDOMAIN = external_tool_url.split('.quiz-lti-dub')[0].split('//')[1]
+            LTI_INSTITUTION_SUBDOMAIN = external_tool_url_parts[0].split('//')[1]
         if not LTI_ENVIRONMENT_TYPE:
-            LTI_ENVIRONMENT_TYPE = external_tool_url.split('.quiz-lti-dub-')[1].split('.instructure.com')[0]
+            LTI_ENVIRONMENT_TYPE = external_tool_url_parts[1].split('.instructure.com')[0]
 
     else:
         pass  # normally a test student
@@ -103,7 +104,7 @@ token_headers['authorization'] = ('%s' if 'Bearer ' in LTI_BEARER_TOKEN else 'Be
 
 for user_session_id in user_session_ids:
     print('Requesting quiz sessions for participant', user_session_id)
-    token_response = requests.get('%s/participant_sessions/%s/grade' % (LTI_API_ROOT, user_session_id['link']),
+    token_response = requests.get('%s/participant_sessions/%s/grade' % (LTI_API_ROOT, user_session_id['session_id']),
                                   headers=token_headers)
     if token_response.status_code != 200:
         # TODO: there doesn't seem to be an API to get this token, but is there a better alternative to the current way?
@@ -179,6 +180,7 @@ for user_session_id in user_session_ids:
                 for value in current_answer['scored_data']['value']:
                     if current_answer['scored_data']['value'][value]['user_responded']:
                         matched_answer = value
+                        break
 
                 if matched_answer:
                     for choice in question['item']['interaction_data']['choices']:
@@ -187,6 +189,7 @@ for user_session_id in user_session_ids:
                             print(answer_text)
                             spreadsheet['%s%d' % (
                                 openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
+                            break
 
             elif question_type == 'MultipleResponse':
                 # (note that choice lists are unhelpfully stored in a range of different formats/structures...)
@@ -195,6 +198,9 @@ for user_session_id in user_session_ids:
                     for response in current_answer['scored_data']['value'][value]['value']:
                         if current_answer['scored_data']['value'][value]['value'][response]['user_responded']:
                             matched_answer = response
+                            break
+                    if matched_answer:
+                        break
 
                 if matched_answer:
                     for choice in question['item']['interaction_data']['blanks'][0]['choices']:
@@ -203,6 +209,7 @@ for user_session_id in user_session_ids:
                             print(answer_text)
                             spreadsheet['%s%d' % (
                                 openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
+                            break
 
             else:
                 # TODO: handle any other response types

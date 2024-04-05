@@ -31,9 +31,10 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-04-04'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-04-05'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
+import contextlib
 import datetime
 import json
 import math
@@ -50,10 +51,11 @@ import openpyxl.utils
 # noinspection PyPackageRequirements
 import pandas  # we don't list Pandas in requirements.txt to skip installing for other scripts (which do not require it)
 import requests
+import requests.structures
 
 from canvashelpers import Args, Utils, Config
 
-TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S'  # e.g., '2024-12-31T13:30:00'
+TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%SZ'  # e.g., '2024-12-31T13:30:00'
 
 WEBPA_HEADERS = ['Respondent', 'Person', 'Student №', 'Rating', 'Comments (optional)', 'Group №']
 WEBPA_QUIZ_GROUP = 'Group contribution (WebPA)'
@@ -247,6 +249,11 @@ class GroupResponseProcessor:
                 'quiz[show_correct_answers]': 'false',  # note: must be a string not a boolean
                 'quiz[only_visible_to_overrides]': True
             }
+            if args.setup_quiz_available_from:
+                quiz_configuration['quiz[unlock_at]'] = args.setup_quiz_available_from
+            if args.setup_quiz_due_at:
+                quiz_configuration['quiz[due_at]'] = args.setup_quiz_due_at
+                quiz_configuration['quiz[lock_at]'] = args.setup_quiz_due_at
 
             if args.dry_run:
                 print('\tDRY RUN: skipping creation of new quiz:', quiz_configuration['quiz[title]'])
@@ -380,6 +387,11 @@ class GroupResponseProcessor:
                 'quiz[quiz_settings][result_view_settings][display_points_possible]': 'false',
                 'quiz[quiz_settings][result_view_settings][display_items]': 'false'
             }
+            if args.setup_quiz_available_from:
+                quiz_configuration['quiz[unlock_at]'] = args.setup_quiz_available_from
+            if args.setup_quiz_due_at:
+                quiz_configuration['quiz[due_at]'] = args.setup_quiz_due_at
+                quiz_configuration['quiz[lock_at]'] = args.setup_quiz_due_at
 
             if args.dry_run:
                 print('\tDRY RUN: skipping creation of new quiz:', quiz_configuration['quiz[title]'])
@@ -499,8 +511,6 @@ class GroupResponseProcessor:
                 if args.setup_quiz_export_links:
                     pass
             output_count += 1
-
-            sys.exit()
 
         if args.setup_quiz_export_links:
             quiz_link_file = os.path.join(WORKING_DIRECTORY, '%s.xlsx' % args.quiz_group_name)
@@ -692,9 +702,11 @@ class GroupResponseProcessor:
         assignment_list_response_json = json.loads(assignment_list_response)
         for quiz in assignment_list_response_json:
             if 'quiz_id' not in quiz:
-                print('WARNING: found new quiz assignment that is not yet directly supported for WebPA analysis -',
-                      'skipping', quiz)
-                continue
+                # avoid having to specify quiz type for analysis by detecting the type of the first submission
+                print('WARNING: found new quiz assignment', quiz['id'], '- switching to new quizzes mode')
+                return GroupResponseProcessor.get_new_quizzes(groups, expected_submissions, summary_sheet,
+                                                              assignment_list_response_json)
+
             quiz_id = quiz['quiz_id']
             print('\nFound quiz ID', quiz_id, '-', quiz['name'], 'with assignment ID', quiz['id'], 'due at',
                   quiz['due_at'])
@@ -722,7 +734,7 @@ class GroupResponseProcessor:
                     rating_question = True
                     question_student_map[question_id] = question_name
                 print('%s question' % ('rating' if rating_question else 'comments'), question_id,
-                      'titled:', question['question_name'], end='; ')
+                      'titled:', question_name, end='; ')
             print()
 
             # then all submissions for that quiz
@@ -758,11 +770,11 @@ class GroupResponseProcessor:
                 current_rater = submission_from['login_id']
                 current_rater_name = submission_from['name']
                 if current_rater not in expected_submissions:
-                    print('\t\tWARNING: skipping unexpected form from student not in any group', current_rater)
+                    print('\t\tWARNING: skipping unexpected form from student not in any group:', current_rater)
                     invalid.append(current_rater)
                     continue
                 if current_rater not in valid_members:
-                    print('\t\tWARNING: skipping unexpected form from student not in current group', current_rater)
+                    print('\t\tWARNING: skipping unexpected form from student not in current group:', current_rater)
                     invalid.append(current_rater)
                     continue
                 if submission_summary['workflow_state'] not in ['complete', 'graded', 'pending_review']:
@@ -770,13 +782,16 @@ class GroupResponseProcessor:
                           submission_summary)
                     invalid.append(current_rater)
                     continue
-                due_date = quiz['due_at'] or submission_summary['cached_due_date']  # date is oddly sometimes missing
-                if (datetime.datetime.strptime(submission_summary['submitted_at'], TIMESTAMP_FORMAT) >
-                        datetime.datetime.strptime(due_date, TIMESTAMP_FORMAT)):
-                    print('\t\tWARNING: skipping late rating submission from', current_rater, '- submitted at',
-                          submission_summary['submitted_at'], 'but due at', due_date)
-                    invalid.append(current_rater)
-                    continue
+
+                # date is oddly sometimes missing even if previously set
+                due_date = quiz['due_at'] or submission_summary['cached_due_date']
+                if due_date:
+                    if (datetime.datetime.strptime(submission_summary['submitted_at'], TIMESTAMP_FORMAT) >
+                            datetime.datetime.strptime(due_date, TIMESTAMP_FORMAT)):
+                        print('\t\tWARNING: skipping late rating submission from', current_rater, '- submitted at',
+                              submission_summary['submitted_at'], 'but due at', due_date)
+                        invalid.append(current_rater)
+                        continue
                 print('\t\tFound submission from', current_rater_name, '- Canvas ID:', submission_from['id'],
                       '; student number:', current_rater)
 
@@ -828,6 +843,8 @@ class GroupResponseProcessor:
                     elif answer_value and answer_value.lower().strip() != 'none':
                         print('\t\tWARNING: Comments from', current_rater_name, ':', answer_value)
 
+                # finally, check for errors and collate responses
+                # noinspection DuplicatedCode
                 if current_group:
                     sorted_found = sorted(found_members)
                     sorted_expected = sorted(valid_members)
@@ -847,12 +864,241 @@ class GroupResponseProcessor:
                 if not invalid_response:
                     respondents.append(current_rater)
                     if current_errors:
-                        print('WARNING: form data required corrections', current_rater, '-', current_errors)
+                        print('\tWARNING: form data required corrections', current_rater, '-', current_errors)
                     for response in current_responses:
                         response[3] = response[2] / current_total
                         summary_sheet.append(response)
                 else:
-                    print('ERROR: skipping invalid form from', current_rater, '-', current_errors)
+                    print('\tERROR: skipping invalid form from', current_rater, '-', current_errors)
+                    invalid.append(current_rater)
+
+        return respondents, invalid, errors
+
+    @staticmethod
+    def get_new_quizzes(groups, expected_submissions, summary_sheet, assignment_list_response_json):
+        # frustratingly, much of this code needs to be duplicated from the quiz exporter script due to the lack of a new
+        # quizzes response API (note also we need to use Canvas IDs far more because New Quizzes hide student numbers)
+        respondents = []
+        invalid = []
+        errors = {}
+
+        config_settings = Config.get_settings()
+        root_instructure_domain = 'https://%s.quiz-%s-dub-%s.instructure.com/api'
+        lti_environment_type = None  # auto-detected based on first submission found
+        lti_institution_subdomain = None  # auto-detected based on first submission found
+        lti_bearer_token = config_settings['lti_bearer_token']
+        bearer_token_error_message = ('See the configuration file instructions, and the assignment\'s SpeedGrader '
+                                      'page: %s/gradebook/speed_grader?assignment_id=%d') % (
+                                         assignment_list_response_json[0]['html_url'].split('/assignments')[0],
+                                         assignment_list_response_json[0]['id'])
+        if lti_bearer_token.startswith('*** your'):
+            print('WARNING: lti_bearer_token in', Config.FILE_PATH, 'seems to contain the example value.',
+                  bearer_token_error_message)
+        html_regex = re.compile('<.*?>')  # used to filter out HTML formatting from retrieved responses
+
+        for quiz in assignment_list_response_json:
+            quiz_id = quiz['id']
+            print('\nFound new quiz with assignment ID', quiz_id, 'due at', quiz['due_at'])
+
+            current_group = int(quiz['name'].split('[')[-1].rstrip(']').split(' ')[-1])
+            valid_members = [g['student_number'] for g in groups[current_group]]
+            print('\tIdentified group', current_group, 'with expected members', valid_members)
+
+            assignment_url = Utils.course_url_to_api(quiz['html_url'])
+            print('\tRequesting new quiz assignment submissions list from', assignment_url)
+            with open(os.devnull, 'w') as f, contextlib.redirect_stdout(f):
+                submission_list_response = Utils.get_assignment_submissions(assignment_url)
+            if not submission_list_response:
+                print('\tERROR: unable to retrieve new quiz assignment submission list')
+                sys.exit()
+
+            submission_list_json = json.loads(submission_list_response)
+            user_session_map = []
+            for submission_summary in submission_list_json:
+                if submission_summary['submission_type'] and 'external_tool_url' in submission_summary:
+                    current_rater = submission_summary['user']['login_id']
+                    current_rater_name = submission_summary['user']['name']
+                    if current_rater not in expected_submissions:
+                        print('\tWARNING: skipping unexpected new quiz from student not in any group:', current_rater)
+                        invalid.append(current_rater)
+                        continue
+                    if current_rater not in valid_members:
+                        print('\tWARNING: skipping unexpected new quiz from student not in current group:',
+                              current_rater)
+                        invalid.append(current_rater)
+                        continue
+                    if submission_summary['workflow_state'] not in ['complete', 'graded', 'pending_review']:
+                        print('\tWARNING: skipping empty or partly-complete new quiz from', current_rater, '-',
+                              submission_summary)
+                        invalid.append(current_rater)
+                        continue
+
+                    # date is oddly sometimes missing even if previously set
+                    due_date = quiz['due_at'] or submission_summary['cached_due_date']
+                    if due_date:
+                        if (datetime.datetime.strptime(submission_summary['submitted_at'], TIMESTAMP_FORMAT) >
+                                datetime.datetime.strptime(due_date, TIMESTAMP_FORMAT)):
+                            print('\tWARNING: skipping late new quiz submission from', current_rater,
+                                  '- submitted at',
+                                  submission_summary['submitted_at'], 'but due at', due_date)
+                            invalid.append(current_rater)
+                            continue
+                    print('\tFound new quiz submission from', current_rater_name, '- Canvas ID:',
+                          submission_summary['user_id'], '; student number:', current_rater)
+
+                    tool_url = submission_summary['external_tool_url']
+                    tool_url_parts = tool_url.split('.quiz-lti-dub-')
+                    user_session_map.append({'student_number': current_rater,
+                                             'canvas_id': submission_summary['user_id'],
+                                             'session_id': tool_url.split('participant_session_id=')[1].split('&')[0]})
+                    if not lti_institution_subdomain:
+                        lti_institution_subdomain = tool_url_parts[0].split('//')[1]
+                    if not lti_environment_type:
+                        lti_environment_type = tool_url_parts[1].split('.instructure.com')[0]
+
+            if len(user_session_map) <= 0:
+                print('\tNo valid submissions found for new quiz', quiz_id, '- skipping')
+                continue
+
+            current_responses = []
+            current_errors = []
+            current_total = 0
+            found_members = []
+            invalid_response = False
+
+            lti_api_root = root_instructure_domain % (lti_institution_subdomain, 'lti', lti_environment_type)
+            quiz_api_root = root_instructure_domain % (lti_institution_subdomain, 'api', lti_environment_type)
+
+            token_headers = requests.structures.CaseInsensitiveDict()
+            token_headers['accept'] = 'application/json'
+            token_headers['authorization'] = ('%s' if 'Bearer ' in lti_bearer_token else 'Bearer %s') % lti_bearer_token
+
+            for session in user_session_map:
+                print('\t\tLoading new quiz session', session)
+                token_response = requests.get(
+                    '%s/participant_sessions/%s/grade' % (lti_api_root, session['session_id']), headers=token_headers)
+                if token_response.status_code != 200:
+                    print('\t\tERROR: unable to load new quiz session - did you set a valid lti_bearer_token in',
+                          '%s?' % Config.FILE_PATH, bearer_token_error_message)
+                    sys.exit()
+
+                # first we get a per-submission access token
+                attempt_json = token_response.json()
+                quiz_session_headers = requests.structures.CaseInsensitiveDict()
+                quiz_session_headers['accept'] = 'application/json'
+                quiz_session_headers['authorization'] = attempt_json['token']
+                quiz_session_id = attempt_json['quiz_api_quiz_session_id']
+
+                # then a summary of the submission session and assignment overview
+                submission_response = requests.get('%s/quiz_sessions/%d/' % (quiz_api_root, quiz_session_id),
+                                                   headers=quiz_session_headers)
+                if submission_response.status_code != 200:
+                    print('\t\tERROR: unable to load quiz metadata - aborting:', submission_response)
+                    sys.exit()
+
+                submission_summary_json = submission_response.json()
+                results_id = submission_summary_json['authoritative_result']['id']
+                current_rater = session['student_number']
+                current_rater_name = submission_summary_json['metadata']['user_full_name']
+                print('\t\tLoaded new quiz submission summary', quiz_session_id, 'from', current_rater_name,
+                      '- Canvas ID:', session['canvas_id'], '; student number:', current_rater)
+
+                # then all quiz questions
+                question_student_map = {}
+                comments_question_id = None
+                quiz_questions_response = requests.get(
+                    '%s/quiz_sessions/%d/session_items' % (quiz_api_root, quiz_session_id),
+                    headers=quiz_session_headers)
+                quiz_question_response_json = quiz_questions_response.json()
+                print('\t\tFound', end=' ')
+                for question in quiz_question_response_json:
+                    question_id = question['item']['id']
+                    question_name = question['item']['title']
+                    rating_question = False
+                    if question['item']['user_response_type'] == 'Uuid':
+                        rating_question = True
+                        question_student_map[question_id] = {'subject': question_name,
+                                                             'choices': question['item']['interaction_data']['choices']}
+                    else:
+                        comments_question_id = question['item']['id']  # assume there will be only one comments question
+                    print('%s question' % ('rating' if rating_question else 'comments'), question_id,
+                          'titled:', question_name, end='; ')
+                print()
+
+                # then all submissions for that quiz
+                quiz_answers_response = requests.get(
+                    '%s/quiz_sessions/%d/results/%s/session_item_results' % (
+                        quiz_api_root, quiz_session_id, results_id),
+                    headers=quiz_session_headers)
+                submission_answers = quiz_answers_response.json()
+
+                for answer in submission_answers:
+                    if answer['item_id'] in question_student_map:
+                        response_choices = question_student_map[answer['item_id']]
+                        rated_student = response_choices['subject']
+                        found_members.append(rated_student)
+
+                        # validate the submitted data against Canvas group membership (remembering this may change)
+                        if rated_student not in valid_members:
+                            print('\t\t\tWARNING: Ignoring rating by', current_rater, 'of non member', rated_student)
+                            continue
+
+                        # for multiple choice responses we have to cross-reference the list of choices available
+                        score = None
+                        for value in answer['scored_data']['value']:
+                            if answer['scored_data']['value'][value]['user_responded']:
+                                for choice in response_choices['choices']:
+                                    if choice['id'] == value:
+                                        # no response validation: assume choices are the same as when we created them
+                                        score = int(re.sub(html_regex, '', choice['item_body'].split(':')[0]))
+                                        print('\t\t\tRating from', current_rater_name, 'for',
+                                              response_choices['subject'], ':', score)
+
+                                        current_responses.append(
+                                            [current_rater, rated_student, score, None, current_group])
+                                        current_total += score
+                                        break
+                            if score:
+                                break
+
+                        if not score:
+                            print('\t\t\tWARNING: Unable to find matching choice for rating; skipping', answer)
+                            continue
+
+                    elif answer['item_id'] == comments_question_id:
+                        raw_answer = answer['scored_data']['value']
+                        if raw_answer:
+                            answer_text = re.sub(html_regex, '', raw_answer)
+                            if answer_text and answer_text.lower().strip() != 'none':
+                                print('\t\t\tWARNING: Comments from', current_rater_name, ':', answer_text)
+
+                # finally, check for errors and collate responses
+                # noinspection DuplicatedCode
+                if current_group:
+                    sorted_found = sorted(found_members)
+                    sorted_expected = sorted(valid_members)
+                    if sorted_found != sorted_expected:
+                        members_missing = set(sorted_expected) - set(sorted_found)
+                        if members_missing:
+                            current_errors.append('Group member(s) missing: %s' % ', '.join(members_missing))
+                            invalid_response = True
+                        members_added = set(sorted_found) - set(sorted_expected)
+                        if members_added:  # note: this can have legitimate explanations - e.g., members withdrawing
+                            current_errors.append(
+                                'Non-group member(s) found: %s – ignoring' % ', '.join(str(m) for m in members_added))
+
+                if current_errors:
+                    errors[current_rater] = current_errors
+
+                if not invalid_response:
+                    respondents.append(current_rater)
+                    if current_errors:
+                        print('\tWARNING: form data required corrections', current_rater, '-', current_errors)
+                    for response in current_responses:
+                        response[3] = response[2] / current_total
+                        summary_sheet.append(response)
+                else:
+                    print('\tERROR: skipping invalid form from', current_rater, '-', current_errors)
                     invalid.append(current_rater)
 
         return respondents, invalid, errors
@@ -948,8 +1194,6 @@ if args.setup:
         if args.setup == 'quiz':
             GroupResponseProcessor.setup_quizzes(group_sets, assignment_group_identifier)
         elif args.setup == 'newquiz':
-            print('WARNING: creation of New Quizzes is currently possible, but automatic analysis of responses is not',
-                  'yet supported. Using the standard `quiz` option is recommended for now.')  # TODO
             GroupResponseProcessor.setup_new_quizzes(group_sets, assignment_group_identifier)
     elif args.setup == 'spreadsheet':
         GroupResponseProcessor.setup_spreadsheets(group_sets)
@@ -983,12 +1227,12 @@ else:
     respondent_list, skipped_respondents, submission_errors = (
         GroupResponseProcessor.get_spreadsheets(group_sets, response_summary_sheet))
 if len(respondent_list) <= 0:
-    print('ERROR: unable to continue; no valid WebPA responses to analyse')
+    print('\nERROR: unable to continue; no valid WebPA responses to analyse')
     sys.exit()
 
 response_summary_file = os.path.join(WORKING_DIRECTORY, 'webpa-response-summary.xlsx')
 response_summary_workbook.save(response_summary_file)
-print('Processed', len(respondent_list), 'valid submissions of', len(respondent_list) + len(skipped_respondents),
+print('\nProcessed', len(respondent_list), 'valid submissions of', len(respondent_list) + len(skipped_respondents),
       'total;', 'combined responses saved to', response_summary_file)
 print('Skipped', len(skipped_respondents), 'late, invalid or tampered submissions from:', skipped_respondents)
 
@@ -1103,7 +1347,7 @@ if args.context_summaries:
 
 writer.close()
 
-print('Successfully calculated WebPA scores and saved calculation to', output_file, '- summary:')
+print('\nSuccessfully calculated WebPA scores and saved calculation to', output_file, '- summary:')
 print(response_data)
 
 # because we add comments using openpyxl, we need to reopen the workbook to save the final version with comments

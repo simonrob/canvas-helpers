@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-20'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-04-05'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import csv
@@ -27,7 +27,8 @@ class Config:
     API_TOKEN = SETTINGS['canvas_api_token']  # all scripts need this token; only a subset need the full settings below
 
     if API_TOKEN.startswith('*** your'):
-        print('WARNING: API token seems to contain the example value - please make sure you have added your own token')
+        print('WARNING: API token in', FILE_PATH, 'seems to contain the example value - please make sure you have',
+              'added your own token')
 
     @staticmethod
     def get_settings():

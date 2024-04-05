@@ -8,7 +8,7 @@ limitation, exporting all responses to a single spreadsheet."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-03-14'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-04-05'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -35,21 +35,20 @@ def get_args():
 
 
 args = Args.interactive(get_args)
-config_settings = Config.get_settings()
-LTI_INSTITUTION_SUBDOMAIN = config_settings['lti_institution_subdomain']
-if LTI_INSTITUTION_SUBDOMAIN.startswith('*** your'):
-    print('WARNING: lti_institution_subdomain seems to contain the example value - please make sure you have added',
-          'your own subdomain')
-LTI_BEARER_TOKEN = config_settings['lti_bearer_token']
-if LTI_BEARER_TOKEN.startswith('*** your'):
-    print('WARNING: lti_bearer_token seems to contain the example value - please make sure you have added your own',
-          'token')
-ROOT_INSTRUCTURE_DOMAIN = 'https://%s.quiz-%s-dub-prod.instructure.com/api'
-LTI_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'lti')
-QUIZ_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'api')
-
 ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 ASSIGNMENT_ID = Utils.get_assignment_id(ASSIGNMENT_URL)  # used only for output spreadsheet title and filename
+
+config_settings = Config.get_settings()
+ROOT_INSTRUCTURE_DOMAIN = 'https://%s.quiz-%s-dub-prod.instructure.com/api'
+LTI_INSTITUTION_SUBDOMAIN = None  # auto-detected based on first submission found
+LTI_BEARER_TOKEN = config_settings['lti_bearer_token']
+BEARER_TOKEN_ERROR_MESSAGE = ('See the configuration file instructions, and the assignment\'s SpeedGrader page: '
+                              '%s/gradebook/speed_grader?assignment_id=%d') % (
+                             args.url[0].split('/assignments')[0], ASSIGNMENT_ID)
+if LTI_BEARER_TOKEN.startswith('*** your'):
+    print('WARNING: lti_bearer_token in', Config.FILE_PATH, 'seems to contain the example value.',
+          BEARER_TOKEN_ERROR_MESSAGE)
+
 OUTPUT_DIRECTORY = os.path.dirname(
     os.path.realpath(__file__)) if args.working_directory is None else args.working_directory
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
@@ -79,12 +78,17 @@ submission_list_json = json.loads(submission_list_response)
 user_session_ids = []
 for submission in submission_list_json:
     if 'external_tool_url' in submission:
+        external_tool_url = submission['external_tool_url']
         user_session_ids.append({'user_id': submission['user_id'],
-                                 'link': submission['external_tool_url'].split('participant_session_id=')[1].split('&')[
-                                     0]})
+                                 'link': external_tool_url.split('participant_session_id=')[1].split('&')[0]})
+        if not LTI_INSTITUTION_SUBDOMAIN:
+            LTI_INSTITUTION_SUBDOMAIN = external_tool_url.split('.quiz-lti-dub')[0].split('//')[1]
+
     else:
         pass  # normally a test student
 print('Loaded', len(user_session_ids), 'submission IDs:', user_session_ids)
+LTI_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'lti')
+QUIZ_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'api')
 
 student_number_map = Utils.get_assignment_student_list(ASSIGNMENT_URL)
 print('Loaded', len(student_number_map), 'student number mappings:', student_number_map)
@@ -100,7 +104,8 @@ for user_session_id in user_session_ids:
                                   headers=token_headers)
     if token_response.status_code != 200:
         # TODO: there doesn't seem to be an API to get this token, but is there a better alternative to the current way?
-        print('ERROR: unable to load quiz session - did you set a valid browser Bearer token in %s?' % Config.FILE_PATH)
+        print('ERROR: unable to load quiz session - did you set a valid lti_bearer_token in %s?' % Config.FILE_PATH,
+              BEARER_TOKEN_ERROR_MESSAGE)
         sys.exit()
 
     # first we get a per-submission access token

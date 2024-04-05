@@ -39,12 +39,13 @@ ASSIGNMENT_URL = Utils.course_url_to_api(args.url[0])
 ASSIGNMENT_ID = Utils.get_assignment_id(ASSIGNMENT_URL)  # used only for output spreadsheet title and filename
 
 config_settings = Config.get_settings()
-ROOT_INSTRUCTURE_DOMAIN = 'https://%s.quiz-%s-dub-prod.instructure.com/api'
+ROOT_INSTRUCTURE_DOMAIN = 'https://%s.quiz-%s-dub-%s.instructure.com/api'
+LTI_ENVIRONMENT_TYPE = None  # auto-detected based on first submission found
 LTI_INSTITUTION_SUBDOMAIN = None  # auto-detected based on first submission found
 LTI_BEARER_TOKEN = config_settings['lti_bearer_token']
 BEARER_TOKEN_ERROR_MESSAGE = ('See the configuration file instructions, and the assignment\'s SpeedGrader page: '
                               '%s/gradebook/speed_grader?assignment_id=%d') % (
-                             args.url[0].split('/assignments')[0], ASSIGNMENT_ID)
+                                 args.url[0].split('/assignments')[0], ASSIGNMENT_ID)
 if LTI_BEARER_TOKEN.startswith('*** your'):
     print('WARNING: lti_bearer_token in', Config.FILE_PATH, 'seems to contain the example value.',
           BEARER_TOKEN_ERROR_MESSAGE)
@@ -83,12 +84,14 @@ for submission in submission_list_json:
                                  'link': external_tool_url.split('participant_session_id=')[1].split('&')[0]})
         if not LTI_INSTITUTION_SUBDOMAIN:
             LTI_INSTITUTION_SUBDOMAIN = external_tool_url.split('.quiz-lti-dub')[0].split('//')[1]
+        if not LTI_ENVIRONMENT_TYPE:
+            LTI_ENVIRONMENT_TYPE = external_tool_url.split('.quiz-lti-dub-')[1].split('.instructure.com')[0]
 
     else:
         pass  # normally a test student
 print('Loaded', len(user_session_ids), 'submission IDs:', user_session_ids)
-LTI_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'lti')
-QUIZ_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'api')
+LTI_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'lti', LTI_ENVIRONMENT_TYPE)
+QUIZ_API_ROOT = ROOT_INSTRUCTURE_DOMAIN % (LTI_INSTITUTION_SUBDOMAIN, 'api', LTI_ENVIRONMENT_TYPE)
 
 student_number_map = Utils.get_assignment_student_list(ASSIGNMENT_URL)
 print('Loaded', len(student_number_map), 'student number mappings:', student_number_map)

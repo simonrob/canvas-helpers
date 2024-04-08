@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-04-05'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-04-08'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -63,7 +63,7 @@ WEBPA_QUIZ_GROUP = 'Group contribution (WebPA)'
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser_example_date = datetime.datetime.now(datetime.UTC).strftime(TIMESTAMP_FORMAT)
+    parser_example_date = datetime.datetime.now(datetime.UTC).strftime(TIMESTAMP_FORMAT).rstrip('Z')
     parser.add_argument('group', nargs=1,
                         help='Please provide the URL of the groups page that shows the group set you wish to use for '
                              'the WebPA exercise (e.g., https://canvas.instructure.com/courses/[course-id]/groups#tab-'
@@ -429,11 +429,13 @@ class GroupResponseProcessor:
                 answer_uuid = None
                 interaction_data = []
                 for i in range(5):
+                    answer_rating = i + 1
                     answer_uuid = str(uuid.uuid4())
                     interaction_data.append({
                         'id': answer_uuid,
-                        'position': i + 1,
-                        'itemBody': config_settings['webpa_rating_question_choice_%d' % (i + 1)]
+                        'position': answer_rating,
+                        'itemBody': '<p><b>%d</b>: %s</p>' % (  # to guarantee starting with the correct rating number
+                            answer_rating, config_settings['webpa_rating_question_choice_%d' % answer_rating])
                     })
                 quiz_question_configuration['item']['entry']['interaction_data'] = {'choices': interaction_data}
                 quiz_question_configuration['item']['entry']['scoring_algorithm'] = 'Equivalence'
@@ -1049,20 +1051,27 @@ class GroupResponseProcessor:
                             if answer['scored_data']['value'][value]['user_responded']:
                                 for choice in response_choices['choices']:
                                     if choice['id'] == value:
-                                        # no response validation: assume choices are the same as when we created them
-                                        score = int(re.sub(html_regex, '', choice['item_body'].split(':')[0]))
-                                        print('\t\t\tRating from', current_rater_name, 'for',
-                                              response_choices['subject'], ':', score)
+                                        try:
+                                            score = int(re.sub(html_regex, '', choice['item_body'].split(':')[0]))
+                                            print('\t\t\tRating from', current_rater_name, 'for',
+                                                  response_choices['subject'], ':', score)
 
-                                        current_responses.append(
-                                            [current_rater, rated_student, score, None, current_group])
-                                        current_total += score
-                                        break
+                                            current_responses.append(
+                                                [current_rater, rated_student, score, None, current_group])
+                                            current_total += score
+                                            break
+                                        except ValueError as e:
+                                            print('ERROR: Unable to process new quiz rating', value, '- has this quiz',
+                                                  'been edited outside of the WebPA script? Error message:', e)
+                                            sys.exit()
                             if score:
                                 break
 
                         if not score:
-                            print('\t\t\tWARNING: Unable to find matching choice for rating; skipping', answer)
+                            print('\t\t\tWARNING: Unable to find matching choice from', current_rater_name, 'for',
+                                  rated_student, 'rating; skipping:', answer)
+                            current_errors.append('Member %s rating missing' % rated_student)
+                            invalid_response = True
                             continue
 
                     elif answer['item_id'] == comments_question_id:

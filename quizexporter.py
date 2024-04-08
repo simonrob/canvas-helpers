@@ -8,7 +8,7 @@ limitation, exporting all responses to a single spreadsheet."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-04-05'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-04-08'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -169,47 +169,94 @@ for user_session_id in user_session_ids:
                 # text-based responses are simply recorded in the scored data
                 raw_answer = current_answer['scored_data']['value']
                 if raw_answer:
-                    answer_text = re.sub(HTML_REGEX, '', raw_answer)
+                    if type(raw_answer) is list:  # file upload questions
+                        answer_text = raw_answer[0]['url']
+                    elif type(raw_answer) is dict:  # formula questions
+                        answer_text = raw_answer['user_response']
+                    else:  # essay questions
+                        answer_text = re.sub(HTML_REGEX, '', raw_answer)
+
                     print(answer_text)
                     spreadsheet[
                         '%s%d' % (openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
+                else:
+                    print('ERROR: no response value found for', question_type, 'question', question_id)
 
-            elif question_type == 'Uuid':
-                # for other response types we have to cross-reference the list of choices available
-                matched_answer = None
+            elif question_type == 'Boolean':
                 for value in current_answer['scored_data']['value']:
                     if current_answer['scored_data']['value'][value]['user_responded']:
-                        matched_answer = value
+                        print(value)
+                        spreadsheet[
+                            '%s%d' % (openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = value
                         break
 
-                if matched_answer:
-                    for choice in question['item']['interaction_data']['choices']:
-                        if choice['id'] == matched_answer:
-                            answer_text = re.sub(HTML_REGEX, '', choice['item_body'])
-                            print(answer_text)
-                            spreadsheet['%s%d' % (
-                                openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
-                            break
+            elif question_type == 'Uuid' or question_type == 'MultipleUuid':
+                # for multiple choice, multiple answer and ordering options we provide the items the user chose
+                answer_parts = []
+                for value in current_answer['scored_data']['value']:
+                    if type(value) is dict:  # ordering question - all responses in the order given
+                        selected_answer = value['user_responded']
+                        answer_body = question['item']['interaction_data']['choices'][selected_answer]['item_body']
+                        answer_parts.append(re.sub(HTML_REGEX, '', answer_body))
+                    else:  # multiple choice or multiple answer question - include only the selected answers
+                        if current_answer['scored_data']['value'][value]['user_responded']:
+                            for choice in question['item']['interaction_data']['choices']:
+                                if choice['id'] == value:
+                                    answer_body = re.sub(HTML_REGEX, '', choice['item_body'])
+                                    answer_parts.append(re.sub(HTML_REGEX, '', answer_body))
+                                    break
+
+                if len(answer_parts) > 0:
+                    answer_text = ', '.join(answer_parts)
+                    print(answer_text)
+                    spreadsheet['%s%d' % (
+                        openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
+                else:
+                    print('ERROR: no response value found for', question_type, 'question', question_id)
+                    spreadsheet['%s%d' % (
+                        openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = ''
 
             elif question_type == 'MultipleResponse':
                 # (note that choice lists are unhelpfully stored in a range of different formats/structures...)
-                matched_answer = None
+                answer_parts = []
+                skip_question_type = False
                 for value in current_answer['scored_data']['value']:
-                    for response in current_answer['scored_data']['value'][value]['value']:
-                        if current_answer['scored_data']['value'][value]['value'][response]['user_responded']:
-                            matched_answer = response
-                            break
-                    if matched_answer:
+                    if 'correct_answer' in current_answer['scored_data']['value'][value]:  # fill in the blank questions
+                        answer_parts.append(
+                            re.sub(HTML_REGEX, '', current_answer['scored_data']['value'][value]['user_response']))
+
+                    else:
+                        skip_question_type = True
                         break
 
-                if matched_answer:
-                    for choice in question['item']['interaction_data']['blanks'][0]['choices']:
-                        if choice['id'] == matched_answer:
-                            answer_text = re.sub(HTML_REGEX, '', choice['item_body'])
-                            print(answer_text)
-                            spreadsheet['%s%d' % (
-                                openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
-                            break
+                if len(answer_parts) > 0:
+                    answer_text = ', '.join(answer_parts)
+                    print(answer_text)
+                    spreadsheet['%s%d' % (
+                        openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
+                elif skip_question_type:
+                    # TODO: this should really be separate columns for each category, but the way New Quizzes are set
+                    #       up means we don't see which incorrect items were associated with which categories
+                    print('WARNING: quiz response type MultipleResponse (Categorisation) not currently handled -',
+                          'skipping')
+                    spreadsheet['%s%d' % (
+                        openpyxl.utils.get_column_letter(current_column),
+                        spreadsheet_row)] = 'DATA MISSING - NOT YET EXPORTED'
+                else:
+                    print('ERROR: no response value found for', question_type, 'question', question_id)
+                    spreadsheet['%s%d' % (
+                        openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = ''
+
+            elif question_type == 'Hash' or question_type == 'HashOfTexts':
+                # TODO: we don't fully handle Hash (hot spot) or HashOfTexts (matching) questions because they are easy
+                #       to mark automatically, and hard to represent in a spreadsheet except for correct/incorrect
+                print('WARNING: quiz response type', question_type, 'not currently fully handled - providing only',
+                      'correct or incorrect status')
+                response_summary = 'Correct response: %s' % ('true' if current_answer['scored_data'][
+                    'correct'] else 'false')
+                print(response_summary)
+                spreadsheet[
+                    '%s%d' % (openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = response_summary
 
             else:
                 # TODO: handle any other response types
@@ -217,7 +264,6 @@ for user_session_id in user_session_ids:
                 spreadsheet['%s%d' % (
                     openpyxl.utils.get_column_letter(current_column),
                     spreadsheet_row)] = 'DATA MISSING - NOT YET EXPORTED'
-                pass
 
             current_column += 1
 

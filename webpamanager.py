@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-04-08'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-04-09'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -86,7 +86,10 @@ def get_args():
                              'distributed to group members (via, e.g., the `conversationcreator` script). If this '
                              'parameter is not set, the script will look for group members\' responses (searching in '
                              '`--working-directory`; or, alternatively, if `--quiz-group-name` is set, the named '
-                             'Canvas assignment group)')
+                             'Canvas assignment group). With the latter, the script will automatically detect whether '
+                             'the type of quizzes in use. Please note, however, that Classic and New quizzes should '
+                             'not be mixed within the same assignment group. If you use both types, create different '
+                             'assignment groups to separate them')
     parser.add_argument('--quiz-group-name', default=None,
                         help='When `--setup` mode is not specified, setting this parameter causes the script to look '
                              'for a Canvas assignment group with this name to load individual quizzes and responses '
@@ -341,6 +344,22 @@ class GroupResponseProcessor:
                     sys.exit()
                 print('\tPushed update for quiz', quiz_configuration['quiz[title]'])
 
+            # hide the assignment in the gradebook via the assignments API
+            assignment_configuration = {
+                'assignment[omit_from_final_grade]': True,
+                'assignment[hide_in_gradebook]': True
+            }
+            if args.dry_run:
+                print('\tDRY RUN: skipping gradebook configuration for quiz', quiz_configuration['quiz[title]'])
+            else:
+                quiz_update_response = requests.put('%s/assignments/%s' % (COURSE_URL, current_quiz_assignment_id),
+                                                    data=assignment_configuration, headers=Utils.canvas_api_headers())
+                if quiz_update_response.status_code != 200:
+                    print('\tERROR: unable to update gradebook configuration for quiz',
+                          quiz_configuration['quiz[title]'], ':', quiz_update_response.text, '- aborting')
+                    sys.exit()
+                print('\tUpdated gradebook configuration for quiz', quiz_configuration['quiz[title]'])
+
             # finally, configure access so that only this group's members can see and respond to this particular quiz
             current_group_canvas_ids = [student['student_canvas_id'] for student in groups[group_key]]
             GroupResponseProcessor.configure_quiz_access(current_quiz_assignment_id, current_group_canvas_ids)
@@ -551,13 +570,12 @@ class GroupResponseProcessor:
 
     @staticmethod
     def get_assignment_group_id(group_name):
-        assignment_group_response = requests.get('%s/assignment_groups' % COURSE_URL,
-                                                 headers=Utils.canvas_api_headers())
-
-        if assignment_group_response.status_code != 200:
+        assignment_group_response = Utils.canvas_multi_page_request('%s/assignment_groups' % COURSE_URL,
+                                                                    type_hint='assignment groups')
+        if not assignment_group_response:
             return None
 
-        assignment_group_response_json = assignment_group_response.json()
+        assignment_group_response_json = json.loads(assignment_group_response)
         for group_properties in assignment_group_response_json:
             if group_properties['name'] == group_name:
                 return group_properties['id']
@@ -574,9 +592,8 @@ class GroupResponseProcessor:
         return group_creation_response.json()['id']
 
     @staticmethod
-    def get_spreadsheets(groups, summary_sheet):
+    def get_spreadsheets(groups, expected_submissions, summary_sheet):
         response_files = [f for f in os.listdir(WORKING_DIRECTORY) if re.match(r'\d+\.xlsx?', f)]
-        expected_submissions = [member['student_number'] for group_key in groups.values() for member in group_key]
         errors = {}
         skipped_files = []
         for file in response_files:
@@ -683,8 +700,7 @@ class GroupResponseProcessor:
         return respondents, invalid, errors
 
     @staticmethod
-    def get_quizzes(groups, summary_sheet, quiz_group_name):
-        expected_submissions = [member['student_number'] for group_key in groups.values() for member in group_key]
+    def get_quizzes(groups, expected_submissions, summary_sheet, quiz_group_name):
         respondents = []
         invalid = []
         errors = {}
@@ -1229,12 +1245,14 @@ response_summary_sheet.title = 'WebPA response form summary'
 response_summary_sheet.freeze_panes = 'A2'  # set the first row as a header
 response_summary_sheet.append(['Rater', 'Subject', 'Rating', 'Normalised', 'Group'])
 
+submission_students = [member['student_number'] for group_key in group_sets.values() for member in group_key]
 if args.quiz_group_name:
     respondent_list, skipped_respondents, submission_errors = (
-        GroupResponseProcessor.get_quizzes(group_sets, response_summary_sheet, args.quiz_group_name))
+        GroupResponseProcessor.get_quizzes(group_sets, submission_students, response_summary_sheet,
+                                           args.quiz_group_name))
 else:
     respondent_list, skipped_respondents, submission_errors = (
-        GroupResponseProcessor.get_spreadsheets(group_sets, response_summary_sheet))
+        GroupResponseProcessor.get_spreadsheets(group_sets, submission_students, response_summary_sheet))
 if len(respondent_list) <= 0:
     print('\nERROR: unable to continue; no valid WebPA responses to analyse')
     sys.exit()
@@ -1242,7 +1260,8 @@ if len(respondent_list) <= 0:
 response_summary_file = os.path.join(WORKING_DIRECTORY, 'webpa-response-summary.xlsx')
 response_summary_workbook.save(response_summary_file)
 print('\nProcessed', len(respondent_list), 'valid submissions of', len(respondent_list) + len(skipped_respondents),
-      'total;', 'combined responses saved to', response_summary_file)
+      'total', '(%.1f%% of %d expected);' % (len(respondent_list) / len(submission_students), len(submission_students)),
+      'combined responses saved to', response_summary_file)
 print('Skipped', len(skipped_respondents), 'late, invalid or tampered submissions from:', skipped_respondents)
 
 # finally, shape original marks according to the summary file of group member ratings (using pandas for ease)

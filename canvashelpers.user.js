@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-02-22
+// @version      2024-04-16
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -14,7 +14,7 @@
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
-/* global GM_addStyle */
+/* global GM_addStyle, waitForKeyElements */
 
 (function () {
     'use strict';
@@ -28,6 +28,9 @@
         body:not(.full-width):not(.outcomes):not(.body--login-confirmation) .ic-Layout-wrapper {
             max-width: inherit !important; /* for some reason the beta and test pages have this set to 1366px */
         }
+        #right-side .shared-space h2 {
+            display: inline; /* fix the display of inline icons in right-side menus */
+        }
     `);
 
     // remove the courses popout menu and just go straight to the list (Canvancement's "All Courses Sort" recommended)
@@ -38,6 +41,40 @@
             return false;
         };
     }
+
+    // add a new button to clear all todo list items
+    waitForKeyElements('.todo-list-header', function (header) {
+        const headerWrapper = document.createElement('div');
+        headerWrapper.setAttribute('class', 'h2 shared-space');
+        headerWrapper.setAttribute('style', 'margin-top: 18px;');
+        const clearIcon = document.createElement('a');
+        clearIcon.setAttribute('class', 'events-list icon-trash standalone-icon');
+        clearIcon.setAttribute('style', 'float: right; font-size: 12px; font-size: 0.75rem; font-weight: normal;');
+        clearIcon.setAttribute('href', '#');
+        clearIcon.addEventListener('click', function () {
+            const todoList = document.querySelectorAll('button[title="Ignore until new submission"]');
+            [...todoList].forEach(button => {
+                button.click();
+            });
+            return false;
+        });
+        clearIcon.textContent = 'Clear all';
+        header.parentNode.insertBefore(headerWrapper, header);
+        headerWrapper.appendChild(header);
+        headerWrapper.appendChild(clearIcon);
+    });
+
+    // for the Python-based New Quiz integrations, we need a separate API key - make retrieving this easier
+    waitForKeyElements('div[role="main"] > div', function (container) {
+        const headerContainer = container.querySelector('.pages-styles__preHeaderContent');
+        if (headerContainer) {
+            headerContainer.insertAdjacentHTML('beforeend', '<button id="canvas-helpers-quiz-api-key" ' +
+                'style="cursor:pointer" type="button"><span>Display New Quiz API token</span></button>');
+            headerContainer.querySelector('#canvas-helpers-quiz-api-key').addEventListener('click', function () {
+                alert(window.sessionStorage.access_token);
+            });
+        }
+    });
 
     // -----------------------------------------------------------------------------------------------------------------
     // Homepage: make course cards smaller and hide the "Published Courses" header (in staff view)
@@ -73,31 +110,7 @@
             .unpublished_courses_redesign .ic-DashboardCard__box {
                 padding: 12px 0;
             }
-            #right-side .shared-space h2 {
-                display: inline;
-            }
         `);
-
-        // add a new button to clear all todo list items
-        waitForKeyElements('.todo-list-header', function (header) {
-            const headerWrapper = document.createElement('div');
-            headerWrapper.setAttribute('class', 'h2 shared-space');
-            const clearIcon = document.createElement('a');
-            clearIcon.setAttribute('class', 'events-list icon-trash standalone-icon');
-            clearIcon.setAttribute('style', 'float:right; font-size:12px; font-size:0.75rem; font-weight:normal;');
-            clearIcon.setAttribute('href', '#');
-            clearIcon.addEventListener('click', function () {
-                const todoList = document.querySelectorAll('button[title="Ignore until new submission"]');
-                [...todoList].forEach(button => {
-                    button.click();
-                });
-                return false;
-            });
-            clearIcon.textContent = 'Clear all';
-            header.parentNode.insertBefore(headerWrapper, header);
-            headerWrapper.appendChild(header);
-            headerWrapper.appendChild(clearIcon);
-        });
     }
 
     // -----------------------------------------------------------------------------------------------------------------

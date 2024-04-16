@@ -5,7 +5,7 @@ The script also has an option to list direct media links, which is useful when e
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-21'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-04-16'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -42,7 +42,7 @@ def get_args():
     parser.add_argument('--license', default=None,
                         choices=['own_copyright', 'used_by_permission', 'fair_use', 'public_domain',
                                  'creative_commons'],
-                        help='The license type to set for uploaded files')
+                        help='The license type to set for uploaded files. Default: None')
     parser.add_argument('--publish', action='store_true',
                         help='Whether to publish the uploaded files. In order to publish files, `--license` must also '
                              'be provided. Default: False')
@@ -61,7 +61,11 @@ def get_args():
 
 args = Args.interactive(get_args)
 COURSE_URL = Utils.course_url_to_api(args.url[0]).split('/files')[0]
-COURSE_ROOT, FOLDER_ROOT = args.url[0].split('/files/folder/')
+try:
+    COURSE_ROOT, FOLDER_ROOT = args.url[0].split('/files/folder/')
+except ValueError:
+    COURSE_ROOT = args.url[0].split('/files')[0]
+    FOLDER_ROOT = ''
 
 # first we need to locate the remote folder
 folder_path_response = requests.get('%s/folders/by_path/%s' % (COURSE_URL, FOLDER_ROOT),
@@ -76,7 +80,7 @@ print('Found requested Canvas folder:', selected_folder)
 
 # getting media IDs is a single-purpose option
 if args.get_media_ids:
-    print('\nMedia ID mode: searching for existing media in', FOLDER_ROOT)
+    print('\nMedia ID mode: searching for existing media in', FOLDER_ROOT if FOLDER_ROOT else '[root folder]')
     existing_files = Utils.canvas_multi_page_request(selected_folder_api_path, type_hint='files')
     if not existing_files:
         print('No files found in the given folder; nothing to do')
@@ -114,7 +118,7 @@ for file in selected_files:
 
     uploaded_file_id = None
     if not args.dry_run:
-        # if there is an attachment we first need to request an upload URL, then associate with a submission comment
+        # we first need to request an upload URL, then send the actual data
         submission_form_data = {
             'name': file_name,
             'content_type': file_mime_type
@@ -134,7 +138,7 @@ for file in selected_files:
                                              headers=Utils.canvas_api_headers())
 
         if file_upload_response.status_code != 201:  # note: 201 Created
-            print('\tERROR: unable to upload file; skipping')
+            print('\tERROR: unable to upload file; skipping:', file_upload_response.text)
             continue
 
         file_upload_json = file_upload_response.json()

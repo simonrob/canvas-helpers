@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-04-09'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-04-17'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -904,13 +904,13 @@ class GroupResponseProcessor:
         root_instructure_domain = 'https://%s.quiz-%s-dub-%s.instructure.com/api'
         lti_environment_type = None  # auto-detected based on first submission found
         lti_institution_subdomain = None  # auto-detected based on first submission found
-        lti_bearer_token = config_settings['lti_bearer_token']
+        lti_bearer_token = config_settings['new_quiz_lti_bearer_token']
         bearer_token_error_message = ('See the configuration file instructions, and the assignment\'s SpeedGrader '
                                       'page: %s/gradebook/speed_grader?assignment_id=%d') % (
                                          assignment_list_response_json[0]['html_url'].split('/assignments')[0],
                                          assignment_list_response_json[0]['id'])
         if lti_bearer_token.startswith('*** your'):
-            print('WARNING: lti_bearer_token in', Config.FILE_PATH, 'seems to contain the example value.',
+            print('WARNING: new_quiz_lti_bearer_token in', Config.FILE_PATH, 'seems to contain the example value.',
                   bearer_token_error_message)
         html_regex = re.compile('<.*?>')  # used to filter out HTML formatting from retrieved responses
 
@@ -996,8 +996,8 @@ class GroupResponseProcessor:
                 token_response = requests.get(
                     '%s/participant_sessions/%s/grade' % (lti_api_root, session['session_id']), headers=token_headers)
                 if token_response.status_code != 200:
-                    print('\t\tERROR: unable to load new quiz session - did you set a valid lti_bearer_token in',
-                          '%s?' % Config.FILE_PATH, bearer_token_error_message)
+                    print('\t\tERROR: unable to load new quiz session - did you set a valid new_quiz_lti_bearer_token',
+                          'in %s?' % Config.FILE_PATH, bearer_token_error_message)
                     sys.exit()
 
                 # first we get a per-submission access token

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-04-16
+// @version      2024-04-17
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -68,11 +68,19 @@
     waitForKeyElements('div[role="main"] > div', function (container) {
         const headerContainer = container.querySelector('.pages-styles__preHeaderContent');
         if (headerContainer) {
-            headerContainer.insertAdjacentHTML('beforeend', '<button id="canvas-helpers-quiz-api-key" ' +
-                'style="cursor:pointer" type="button"><span>Display New Quiz API token</span></button>');
-            headerContainer.querySelector('#canvas-helpers-quiz-api-key').addEventListener('click', function () {
-                alert(window.sessionStorage.access_token);
+            const existingButton = headerContainer.querySelector('button:first-of-type');
+            const newButton = existingButton.cloneNode(true);
+            newButton.querySelector('span[class$="baseButton__iconWrapper"]').remove(); // any existing icon
+            newButton.querySelector('span[class$="baseButton__children"]').textContent = 'Display/copy New Quiz API token';
+            newButton.addEventListener('click', function () {
+                navigator.clipboard.writeText(window.sessionStorage.access_token).catch((e) => {
+                    console.log('Unable to copy to clipboard:', e);
+                });
+                alert('Your current New Quiz API bearer token is:\n\n' + window.sessionStorage.access_token +
+                    '\n\nThis value has been copied to the clipboard to use as the `new_quiz_lti_bearer_token` value ' +
+                    'for Canvas Helpers New Quiz scripts.');
             });
+            existingButton.after(newButton);
         }
     });
 

@@ -77,6 +77,11 @@ In the meantime, this script allows you to export all quiz responses to an XLSX 
 Usage: `python quizexporter.py [assignment URL]`.
 See `python quizexporter.py --help` for additional options.
 
+- [Studio embed helper](studioembedhelper.py): When using Canvas Studio as a place to host videos for embedding in a course, it is easy to embed a single video, but time-consuming to embed a large number of videos at the same time.
+This script helps you generate the embed HTML for a whole collection of videos at the same time
+Usage: `python studioembedhelper.py [course URL] --collection [name of the collection to use]`.
+See `python studioembedhelper.py --help` for additional guidance.
+
 - [Course cleaner](coursecleaner.py): Canvas supports the use of course templates ("Blueprints") that are often used to fill new courses with example content.
 While this can be useful, if over-used it tends to be more of an annoyance than a helpful starting point. 
 This script allows you to easily delete some or all course content (e.g., pages, modules, assignments, etc.) before starting again or importing from an existing course.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-04-17
+// @version      2024-04-18
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -9,6 +9,7 @@
 // @description  A UserScript to help make common Canvas tasks more manageable
 // @author       Simon Robinson
 // @match        https://*.instructure.com/*
+// @match        https://*.instructuremedia.com/*
 // @match        https://canvas.swansea.ac.uk/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=instructure.com
 // @grant        none
@@ -77,12 +78,38 @@
                     console.log('Unable to copy to clipboard:', e);
                 });
                 alert('Your current New Quiz API bearer token is:\n\n' + window.sessionStorage.access_token +
-                    '\n\nThis value has been copied to the clipboard to use as the `new_quiz_lti_bearer_token` value ' +
+                    '\n\nThis token has been copied to the clipboard to use as the `new_quiz_lti_bearer_token` value ' +
                     'for Canvas Helpers New Quiz scripts.');
             });
             existingButton.after(newButton);
         }
     });
+
+    // for the Python-based Studio integrations, we need a separate domain and API key - make retrieving this easier
+    waitForKeyElements('span[dir="ltr"]', function (container) {
+        const menuContainer = container.querySelector('ul.NavTrayContent__navLinks');
+        if (menuContainer) {
+            const settingsButton = menuContainer.querySelector('li.NavTrayContent__navLinks-item:last-of-type');
+            if (settingsButton && !menuContainer.querySelector('#canvas-helpers-studio-key-button')) {
+                const sessionToken = 'user_id="' + window.sessionStorage.userId + '", token="' + window.sessionStorage.token + '"';
+                const newButton = settingsButton.cloneNode(true);
+                newButton.id = 'canvas-helpers-studio-key-button';
+                newButton.style.marginTop = '12px';
+                newButton.querySelector('span[class$="truncateText"] > span').textContent = 'Display/copy Studio API token';
+                newButton.addEventListener('click', function () {
+                    navigator.clipboard.writeText(sessionToken).catch((e) => {
+                        console.log('Unable to copy to clipboard:', e);
+                    });
+                    alert('Your current Studio API bearer token is:\n\n' + sessionToken + '\n\nThis token has been ' +
+                        'copied to the clipboard to use as the `studio_lti_bearer_token` value for Canvas Helpers ' +
+                        'Studio scripts. Your `studio_lti_subdomain` value is:\n\n' + window.location.hostname);
+                });
+                settingsButton.after(newButton);
+            }
+            console.log(settingsButton);
+            console.log('CONT', menuContainer);
+        }
+    }, {waitOnce: false});
 
     // -----------------------------------------------------------------------------------------------------------------
     // Homepage: make course cards smaller and hide the "Published Courses" header (in staff view)

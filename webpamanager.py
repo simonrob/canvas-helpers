@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-04-17'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-05-13'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -462,7 +462,7 @@ class GroupResponseProcessor:
 
                 if args.dry_run:
                     print('\tDRY RUN: skipping creation of new quiz question:',
-                          quiz_question_configuration['question[question_name]'])
+                          quiz_question_configuration['item']['entry']['title'])
                 else:
                     quiz_question_response = requests.post(
                         '%s/quizzes/%s/items' % (GroupResponseProcessor.new_quiz_api(COURSE_URL), current_quiz_id),
@@ -489,7 +489,7 @@ class GroupResponseProcessor:
 
             if args.dry_run:
                 print('\tDRY RUN: skipping creation of general comments new quiz question:',
-                      quiz_question_configuration['question[question_name]'])
+                      quiz_question_configuration['item[entry][title]'])
             else:
                 quiz_question_response = requests.post(
                     '%s/quizzes/%s/items' % (GroupResponseProcessor.new_quiz_api(COURSE_URL), current_quiz_id),
@@ -859,7 +859,7 @@ class GroupResponseProcessor:
                             invalid_response = True
 
                     elif answer_value and answer_value.lower().strip() != 'none':
-                        print('\t\tWARNING: Comments from', current_rater_name, ':', answer_value)
+                        print('\t\tWARNING: Comments from', current_rater_name, ':', answer_value.replace('\n', ' '))
 
                 # finally, check for errors and collate responses
                 # noinspection DuplicatedCode
@@ -1095,7 +1095,8 @@ class GroupResponseProcessor:
                         if raw_answer:
                             answer_text = re.sub(html_regex, '', raw_answer)
                             if answer_text and answer_text.lower().strip() != 'none':
-                                print('\t\t\tWARNING: Comments from', current_rater_name, ':', answer_text)
+                                print('\t\t\tWARNING: Comments from', current_rater_name, ':',
+                                      answer_text.replace('\n', ' '))
 
                 # finally, check for errors and collate responses
                 # noinspection DuplicatedCode

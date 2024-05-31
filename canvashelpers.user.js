@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-04-18
+// @version      2024-05-31
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -67,7 +67,7 @@
 
     // for the Python-based New Quiz integrations, we need a separate API key - make retrieving this easier
     waitForKeyElements('div[role="main"] > div', function (container) {
-        const headerContainer = container.querySelector('.pages-styles__preHeaderContent');
+        const headerContainer = container.querySelector('div[data-automation="sdk-grading"]');
         if (headerContainer) {
             const existingButton = headerContainer.querySelector('button:first-of-type');
             const newButton = existingButton.cloneNode(true);
@@ -86,16 +86,22 @@
     });
 
     // for the Python-based Studio integrations, we need a separate domain and API key - make retrieving this easier
-    waitForKeyElements('span[dir="ltr"]', function (container) {
-        const menuContainer = container.querySelector('ul.NavTrayContent__navLinks');
+    waitForKeyElements('span[dir="ltr"],.StandaloneApp,#settings_page_wrapper', function (container) {
+        const menuContainer = container.querySelector('ul.NavTrayContent__navLinks,div.DefaultLayout__main');
         if (menuContainer) {
-            const settingsButton = menuContainer.querySelector('li.NavTrayContent__navLinks-item:last-of-type');
+            const settingsButton = menuContainer.querySelector('li.NavTrayContent__navLinks-item:last-of-type,div[id^="tab-"]:last-of-type');
             if (settingsButton && !menuContainer.querySelector('#canvas-helpers-studio-key-button')) {
                 const sessionToken = 'user_id="' + window.sessionStorage.userId + '", token="' + window.sessionStorage.token + '"';
                 const newButton = settingsButton.cloneNode(true);
                 newButton.id = 'canvas-helpers-studio-key-button';
-                newButton.style.marginTop = '12px';
-                newButton.querySelector('span[class$="truncateText"] > span').textContent = 'Display/copy Studio API token';
+                const sidebarButton = newButton.querySelector('span[class$="truncateText"] > span');
+                const textLabel = 'Display/copy Studio API token';
+                if (sidebarButton) { // we match both the sidebar (which isn't always present) and the main settings page
+                    sidebarButton.style.marginTop = '12px';
+                    sidebarButton.textContent = textLabel;
+                } else {
+                    newButton.textContent = textLabel;
+                }
                 newButton.addEventListener('click', function () {
                     navigator.clipboard.writeText(sessionToken).catch((e) => {
                         console.log('Unable to copy to clipboard:', e);
@@ -106,8 +112,6 @@
                 });
                 settingsButton.after(newButton);
             }
-            console.log(settingsButton);
-            console.log('CONT', menuContainer);
         }
     }, {waitOnce: false});
 

@@ -5,7 +5,7 @@ easily delete some or all course content before starting again or importing from
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-02'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2024-06-18'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -46,7 +46,8 @@ if course_details_response.status_code != 200:
 course_details_json = course_details_response.json()
 COURSE_ID = course_details_json['id']
 COURSE_CODE = course_details_json['course_code']
-COURSE_NAME = course_details_json['original_name']
+COURSE_NAME = course_details_json['original_name'] if 'original_name' in course_details_json else (
+    course_details_json)['name']
 
 print('\nWARNING: this script allows you to delete *all* content from a Canvas course. It is highly recommended to',
       'create a backup at %s/content_exports first' % COURSE_URL.replace('api/v1/', ''))
@@ -140,7 +141,9 @@ if args.reset or args.all:
     course_settings = {
         'course[course_format]': 'on_campus',  # this course is taught in-person
         'course[remove_image]': True,  # clear the course image
-        'course[remove_banner_image]': True  # clear the course banner image
+        'course[remove_banner_image]': True,  # clear the course banner image
+        'show_announcements_on_home_page': True,
+        'home_page_announcement_limit': 1  # show one announcement on the home page
     }
     course_update_response = requests.put(COURSE_URL, params=course_settings, headers=Utils.canvas_api_headers())
     if course_update_response.status_code == 200:

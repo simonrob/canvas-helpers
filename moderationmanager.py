@@ -25,7 +25,7 @@ Related tools:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2023-08-03'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2025-03-12'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -449,7 +449,8 @@ for submission in filtered_submission_list:
     if submitter['canvas_user_id'] not in final_grades:
         print('\tSkipping unmarked submission from', submitter)
         continue
-    final_grade_data = {'submission[posted_grade]': final_grades[submitter['canvas_user_id']]}
+    final_grade_data = {'comment[attempt]': submission['attempt'],
+                        'submission[posted_grade]': final_grades[submitter['canvas_user_id']]}
     if HAS_RUBRIC:
         final_grade_data['comment[text_comment]'] = score_feedback_hint
     user_submission_url = '%s/submissions/%d' % (ASSIGNMENT_URL, submitter['canvas_user_id'])

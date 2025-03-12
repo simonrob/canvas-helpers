@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-03-14'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2025-03-12'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -236,7 +236,8 @@ for submission in filtered_submission_list:
         print('No entry found in mark/comment spreadsheet for', feedback_identifier)
 
     # see: https://canvas.instructure.com/doc/api/submissions.html#method.submissions_api.update
-    comment_association_data = {'comment[text_comment]': attachment_comment.replace('\\n', '\n')}
+    comment_association_data = {'comment[attempt]': submission['attempt'],
+                                'comment[text_comment]': attachment_comment.replace('\\n', '\n')}
     if args.groups and not args.groups_individual:
         comment_association_data['comment[group_comment]'] = True
     if attachment_comment != args.attachment_comment:

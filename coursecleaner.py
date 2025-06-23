@@ -5,7 +5,7 @@ easily delete some or all course content before starting again or importing from
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-06-18'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2025-06-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -57,7 +57,9 @@ def confirm_action(type_hint, action_hint='deleting ALL'):
     print()
     if input('Confirm %s %s for course "%s: %s"? (type yes or no) ' % (
             action_hint, type_hint, COURSE_CODE, COURSE_NAME)).lower() != 'yes':
-        sys.exit('ERROR: aborting deletion; confirmation refused')
+        print('\tWARNING: Confirmation refused; skipping deletion')
+        return False
+    return True
 
 
 # for many content types the basic listing and deletion process follows a very similar pattern
@@ -80,8 +82,7 @@ def delete_items(content_list_path, type_hint, params=None):
     print('Deleted', len(content_list_json), type_hint, 'items')
 
 
-if args.reset or args.all:
-    confirm_action(action_hint='resetting to the default all', type_hint='settings')
+if (args.reset or args.all) and confirm_action(action_hint='resetting to the default all', type_hint='settings'):
 
     # reset navigation items
     course_content_path = '%s/tabs' % COURSE_URL
@@ -117,6 +118,7 @@ if args.reset or args.all:
 
         item_params = {'hidden': item_hidden}
         if item_position > 0:
+            # noinspection PyTypeChecker
             item_params['position'] = item_position
         tab_update_response = requests.put('%s/%s' % (course_content_path, item_id), params=item_params,
                                            headers=Utils.canvas_api_headers())
@@ -165,8 +167,7 @@ if args.reset or args.all:
     else:
         print('\nERROR: unable to update course advanced settings:', course_update_response.text)
 
-if args.pages or args.all:
-    confirm_action(type_hint='pages')
+if (args.pages or args.all) and confirm_action(type_hint='pages'):
 
     course_content_path = '%s/pages' % COURSE_URL
     course_content_response = Utils.canvas_multi_page_request(course_content_path, type_hint='course pages')
@@ -198,8 +199,7 @@ if args.pages or args.all:
                     'front_page'] else '', item_deletion_url), item_deletion_response.text, '-', item)
     print('Deleted', len(course_content_json), 'pages')
 
-if args.modules or args.all:
-    confirm_action(type_hint='modules')
+if (args.modules or args.all) and confirm_action(type_hint='modules'):
 
     course_content_path = '%s/modules' % COURSE_URL
     course_content_response = Utils.canvas_multi_page_request(course_content_path, type_hint='course modules')
@@ -235,44 +235,35 @@ if args.modules or args.all:
                   '-', item)
     print('Deleted', len(course_content_json), 'modules')
 
-if args.assignments or args.all:
-    confirm_action(type_hint='assignments')
-
+if (args.assignments or args.all) and confirm_action(type_hint='assignments'):
     # assignments are split into groups, but unlike modules their APIs are not linked
     delete_items(content_list_path='%s/assignments' % COURSE_URL, type_hint='assignment')
 
     # note: Canvas will auto-create a new assignment group to ensure at least one remains
     delete_items(content_list_path='%s/assignment_groups' % COURSE_URL, type_hint='assignment group')
 
-if args.rubrics or args.all:
-    confirm_action(type_hint='rubrics')
+if (args.rubrics or args.all) and confirm_action(type_hint='rubrics'):
     delete_items(content_list_path='%s/rubrics' % COURSE_URL, type_hint='rubric')
 
-if args.quizzes or args.all:
-    confirm_action(type_hint='quizzes')
+if (args.quizzes or args.all) and confirm_action(type_hint='quizzes'):
     delete_items(content_list_path='%s/quizzes' % COURSE_URL, type_hint='quiz')
 
     # "New Quizzes" have a completely different API path (of course they do)
     delete_items(content_list_path='%s/quizzes' % COURSE_URL.replace('/api/v1', '/api/quiz/v1'), type_hint='new quiz')
 
-if args.discussions or args.all:
-    confirm_action(type_hint='discussions')
+if (args.discussions or args.all) and confirm_action(type_hint='discussions'):
     delete_items(content_list_path='%s/discussion_topics' % COURSE_URL, type_hint='discussion')
 
-if args.announcements or args.all:
-    confirm_action(type_hint='announcements')
-
+if (args.announcements or args.all) and confirm_action(type_hint='announcements'):
     # announcements are retrieved via the discussions API with a special parameter
     delete_items(content_list_path='%s/discussion_topics' % COURSE_URL, type_hint='announcement',
                  params={'only_announcements': True})
 
-if args.events or args.all:
-    confirm_action(type_hint='events')
+if (args.events or args.all) and confirm_action(type_hint='events'):
     delete_items('%s/calendar_events' % COURSE_URL.split('/courses')[0], type_hint='event',
                  params={'all_events': True, 'context_codes[]': ['course_%d' % COURSE_ID]})
 
-if args.files or args.all:
-    confirm_action(type_hint='files')
+if (args.files or args.all) and confirm_action(type_hint='files'):
 
     # first we delete all folders (forcing deletion of non-empty items and their content)
     course_content_path = '%s/folders' % COURSE_URL

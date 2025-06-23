@@ -1,13 +1,20 @@
 """Canvas sometimes seems to try quite hard to hide the fact that students typically have an institutional identifier
-(i.e., student number) that is different to their Canvas ID. This script adds a new custom column in a course's
-Gradebook that shows student numbers. Note: by default, courses often have a hidden custom column called 'Notes' that
-is private to the course teacher. Only one private column is allowed per course, so this column will be replaced (*and
-any existing data lost*) if it is present."""
+(i.e., student number; also often called login ID) that is different to their Canvas ID. This script adds a new custom
+column in a course's Gradebook that shows student numbers and, optionally, group names.
+
+Notes:
+    - Canvas courses have a hidden custom gradebook column called 'Notes' that is private to the course teacher, and
+      this is where the script adds its annotations. Only one private column is allowed per course, however, so this
+      column will be replaced (*and any existing data lost*) if it is present.
+    - In recent versions of Canvas it is now possible to show the information added by this script in the default grade
+      book view (see the "secondary info" options in the dropdown menu for the student name column), though currently
+      only the student ID *or* group name can be shown, not both at once.
+"""
 
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-02-20'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2025-06-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json

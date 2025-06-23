@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-05-13'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2025-06-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -1261,7 +1261,8 @@ if len(respondent_list) <= 0:
 response_summary_file = os.path.join(WORKING_DIRECTORY, 'webpa-response-summary.xlsx')
 response_summary_workbook.save(response_summary_file)
 print('\nProcessed', len(respondent_list), 'valid submissions of', len(respondent_list) + len(skipped_respondents),
-      'total', '(%.1f%% of %d expected);' % (len(respondent_list) / len(submission_students), len(submission_students)),
+      'total', '(%.1f%% of %d expected);' %
+      ((len(respondent_list) / len(submission_students) * 100), len(submission_students)),
       'combined responses saved to', response_summary_file)
 print('Skipped', len(skipped_respondents), 'late, invalid or tampered submissions from:', skipped_respondents)
 
@@ -1327,9 +1328,10 @@ rounding_factor = 1 / args.mark_rounding  # e.g., 0.5 -> 2 to round to nearest 0
 try:
     response_data['Mark'] = (response_data['Mark'] * rounding_factor).round().astype(int) / rounding_factor
 except pandas.errors.IntCastingNaNError:
+    print(response_data.to_string())
     print('ERROR: unable to round marks, probably due to a group name mismatch or missing mark spreadsheet row. Have',
           'you correctly named groups in the `--marks-file` provided? (Note that group names must *exactly* match the',
-          'names used on Canvas)')
+          'names used on Canvas, and non-submitting groups must still have an entry in the marks file.)')
     raise
 response_data['Scaled'] = response_data.apply(
     lambda x: 'Y' if not math.isclose(x['Original'], x['Weighted'], abs_tol=0.00001) else '', axis=1)

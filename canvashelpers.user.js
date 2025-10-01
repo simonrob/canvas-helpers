@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2024-05-31
+// @version      2025-09-30
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -43,7 +43,7 @@
         };
     }
 
-    // add a new button to clear all todo list items
+    // add a new button to clear all task list items
     waitForKeyElements('.todo-list-header', function (header) {
         const headerWrapper = document.createElement('div');
         headerWrapper.setAttribute('class', 'h2 shared-space');
@@ -83,7 +83,7 @@
             });
             existingButton.after(newButton);
         }
-    });
+    }, {waitOnce: false});
 
     // for the Python-based Studio integrations, we need a separate domain and API key - make retrieving this easier
     waitForKeyElements('span[dir="ltr"],.StandaloneApp,#settings_page_wrapper', function (container) {
@@ -152,9 +152,79 @@
         `);
     }
 
+    const custom_data_scope = '/dashboard/custom_cards';
+    const custom_data_url = '/api/v1/users/self/custom_data' + custom_data_scope;
+    const custom_data_namespace = 'canvas-helpers';
+
+    // intercept dashboard card loading response to add our own items - see: https://stackoverflow.com/a/43144531
+    const open_prototype = XMLHttpRequest.prototype.open,
+        intercept_response = function (urlpattern, callback) {
+            XMLHttpRequest.prototype.open = function () {
+                arguments['1'].match(urlpattern) && this.addEventListener('readystatechange', function (event) {
+                    if (this.readyState === 4) {
+                        const response = callback(event.target.responseText);
+                        Object.defineProperty(this, 'response', {writable: true});
+                        Object.defineProperty(this, 'responseText', {writable: true});
+                        this.response = this.responseText = response;
+                    }
+                });
+                return open_prototype.apply(this, arguments);
+            };
+        };
+
+    intercept_response(/dashboard_cards\?observed_user_id/i, function (response) {
+        try {
+            const json = JSON.parse(response);
+
+            // we need to use XHR for a synchronous request here as fetch is async but we need to insert mid-request
+            let customFavourites = [];
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', custom_data_url + '?ns=' + encodeURIComponent(custom_data_namespace), false); // false = synchronous
+            xhr.send();
+            if (xhr.status === 200) {
+                const data = JSON.parse(xhr.responseText);
+                customFavourites = JSON.parse(data.data);
+            }
+
+            json.push(...customFavourites);
+            return JSON.stringify(json);
+        } catch (e) {
+            console.log('Unable to parse dashboard card JSON', e);
+            return response;
+        }
+    });
+
+
+    // temporary method for adding a custom dashboard card manually - useful for courses that cannot be favourited
+    // to use this, open the browser console and call addCustomCard(), then enter the JSON for the new card
+    // minimal example custom card JSON:
+    // {"shortName": "CS Final Year Projects", "courseCode": "CSP300/CSP301/CSP302/CSP344/CSP354", "href": "/courses/60749", "image": "[URL removed for brevity]", "published": true}
+    window.addCustomCard = function () {
+        fetch(custom_data_url + '?ns=canvas-helpers').then(r => r.json()).then(d => {
+            let arr = JSON.parse(d.data || '[]');
+            const new_card = prompt('Paste your new dashboard item as JSON (see this script\'s source for an example).\n\nEnter "CLEAR" to remove all custom cards.\n\nForce-refresh the page to apply your changes:');
+            if (new_card === 'CLEAR') {
+                arr = [];
+            } else {
+                arr.push(JSON.parse(new_card));
+            }
+            const params = {
+                ns: custom_data_namespace,
+                data: JSON.stringify(arr)
+            };
+
+            // use jQuery because fetch requests don't seem to work here for some reason
+            $.ajax({
+                url: custom_data_url,
+                type: 'PUT',
+                data: params
+            });
+        });
+    };
+
     // -----------------------------------------------------------------------------------------------------------------
     // Item lists: remove extra spacing around Modules, Assignments, etc like Condensed MAQ Layout, but a little less
-    // aggressive (see: https://github.com/paulbui/canvas-tweaks)
+    // aggressive (see: https://github.com/paulbui/canvas-tweaks); add admin course list link
     // -----------------------------------------------------------------------------------------------------------------
     if (window.location.pathname.startsWith('/courses')) {
         logCHMessage('Removing spacing around list items');
@@ -172,6 +242,19 @@
             .locked_title {
                 font-size : 1rem !important;
             }
+            /* prevent items moving about on load TODO: are these elements used? */
+            .module_item_icons, .ig-details {
+                display: none !important
+            }
         `);
+
+        // link to the admin view as a reminder that more courses may exist
+        const searchCoursesButton = document.querySelector('a.Button');
+        if (searchCoursesButton) {
+            const adminButton = searchCoursesButton.cloneNode();
+            adminButton.innerText = 'Show admin course view';
+            adminButton.href = '/accounts';
+            searchCoursesButton.parentNode.appendChild(adminButton);
+        }
     }
 })();

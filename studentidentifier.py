@@ -14,7 +14,7 @@ Notes:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2025-06-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2025-11-06'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -102,10 +102,11 @@ course_user_json = json.loads(course_user_response)
 # add a group number where requested - separated for easier format customisation
 def get_column_content(user_identifier):
     column_value = user_identifier
-    if args.add_group_name and user_identifier in group_name_map:
-        column_value = '%s (Gr. %s)' % (user_identifier, group_name_map[user_identifier]['group_number'])
-    else:
-        print('WARNING: no group found for user', user_identifier)
+    if args.add_group_name:
+        if user_identifier in group_name_map:
+            column_value = 'Gr. %s (%s)' % (group_name_map[user_identifier]['group_number'], user_identifier)
+        else:
+            print('WARNING: no group found for user', user_identifier)
     return column_value
 
 

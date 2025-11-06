@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2025-10-13
+// @version      2025-11-06
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -254,6 +254,55 @@
             searchCoursesButton.parentNode.appendChild(adminButton);
         }
     }
+
+    function hookGradeGrid() {
+        if (!window.Slick || !window.Slick.Grid) {
+            setTimeout(hookGradeGrid, 100);  // TODO: is there a better way?
+            return;
+        }
+
+        const OriginalGrid = window.Slick.Grid;
+        window.Slick.Grid = function (...args) {
+            const grid = new OriginalGrid(...args);
+            try {
+                const container = args[0];
+                const el = (typeof container === 'string') ? document.querySelector(container) : container;
+
+                if (el && el.id === 'gradebook_grid') {
+                    logCHMessage('Found gradebook_grid SlickGrid:', grid);
+                    // window.__gradebookGrid = grid; // for easy access if needed later
+
+                    const notesColumn = grid.getColumns().find(c => c.type === 'custom_column');
+                    if (!notesColumn) {
+                        logCHMessage('No notes (custom_column) found');
+                        return;
+                    }
+
+                    // need to wait for elements here because the column headers are redrawn so we lose our listener
+                    waitForKeyElements('div.slick-header-column.' + notesColumn.id, function (header) {
+                        header.style.cursor = 'pointer';
+                        header.dataset.sortAscending = 'true'; // default to ascending
+                        header.addEventListener('click', () => {
+                            const gridData = grid.getData();
+                            const asc = header.dataset.sortAscending === 'true';
+                            gridData.sort((a, b) => (a[notesColumn.field] > b[notesColumn.field] ? (asc ? 1 : -1) : (asc ? -1 : 1)));
+                            grid.setSortColumn(notesColumn.id, asc);
+                            grid.invalidate();
+                            grid.render();
+                            header.dataset.sortAscending = asc ? 'false' : 'true';
+                        });
+                    }, {waitOnce: false});
+                }
+            } catch (e) {
+                logCHMessage('Error capturing Gradebook grid instance:', e);
+            }
+
+            return grid;
+        };
+        window.Slick.Grid.prototype = OriginalGrid.prototype;
+    }
+
+    hookGradeGrid();
 
     // -----------------------------------------------------------------------------------------------------------------
     // To intercept dashboard card requests, this script now runs at document-start.

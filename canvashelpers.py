@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-04-05'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2025-11-06'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import csv
@@ -182,10 +182,12 @@ class Utils:
                     print('WARNING: skipping course member not in any group:', row[csv_headers.index('login_id')])
                     continue
 
+                group_number = re.search(r'\d+', row[csv_headers.index('group_name')])
                 group_entry = {
                     'group_name': row[csv_headers.index('group_name')],
                     'group_id': row[csv_headers.index('canvas_group_id')],
-                    'group_number': int(row[csv_headers.index('group_name')].split(' ')[-1]),
+                    'group_number': int(group_number.group()) if group_number else int(
+                        row[csv_headers.index('group_name')].split(' ')[-1]),
                     'student_number': row[csv_headers.index('login_id')],
                     'student_name': row[csv_headers.index('name')],
                     'student_canvas_id': row[csv_headers.index('canvas_user_id')]

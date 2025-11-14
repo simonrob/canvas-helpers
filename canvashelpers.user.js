@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2025-11-06
+// @version      2025-11-14
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -15,7 +15,7 @@
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
-/* global GM_addStyle, waitForKeyElements */
+/* global GM_addStyle, waitForKeyElements, unsafeWindow */
 
 (function () {
     'use strict';
@@ -165,26 +165,28 @@
 
     const {fetch: origFetch} = window;
     window.fetch = async (...args) => {
-        if (args[0].match(/dashboard_cards\?observed_user_id/i)) {
+        if (typeof args[0] == 'string' && args[0].match(/dashboard_cards\?observed_user_id/i)) {
             logCHMessage('Overriding dashboard card fetch to add custom cards');
+            const originalCardsResponse = await origFetch(...args);
             try {
-                const originalCardsResponse = await origFetch(...args);
                 if (!originalCardsResponse.ok) {
-                    throw new Error('Error loading original dasboard cards: HTTP status:', originalCardsResponse.status);
+                    // noinspection ExceptionCaughtLocallyJS
+                    throw new Error(`Error loading original dashboard cards: HTTP status: ${originalCardsResponse.status}`);
                 }
                 const originalCards = await originalCardsResponse.json();
 
                 const customFavouritesResponse = await origFetch(custom_data_url + '?ns=' + encodeURIComponent(custom_data_namespace));
                 if (!customFavouritesResponse.ok) {
-                    throw new Error('Error loading custom favourites: HTTP status:', customFavouritesResponse.status);
+                    // noinspection ExceptionCaughtLocallyJS
+                    throw new Error(`Error loading custom favourites: HTTP status: ${customFavouritesResponse.status}`);
                 }
                 const customFavourites = await customFavouritesResponse.json();
 
                 originalCards.push(...JSON.parse(customFavourites.data));  // custom content is JSON within JSON
                 return new Response(JSON.stringify(originalCards));
             } catch (e) {
-                logCHMessage('CUSTOM Unable to parse dashboard card JSON', e);
-                return response;
+                logCHMessage('Unable to parse dashboard card JSON', e);
+                return originalCardsResponse;
             }
         } else {
             return await origFetch(...args);
@@ -272,6 +274,7 @@
                     logCHMessage('Found gradebook_grid SlickGrid:', grid);
                     // window.__gradebookGrid = grid; // for easy access if needed later
 
+                    // noinspection JSUnresolvedReference
                     const notesColumn = grid.getColumns().find(c => c.type === 'custom_column');
                     if (!notesColumn) {
                         logCHMessage('No notes (custom_column) found');

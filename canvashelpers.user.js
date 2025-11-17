@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2025-11-14
+// @version      2025-11-17
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -35,12 +35,14 @@
     `);
 
     // remove the courses popout menu and just go straight to the list (Canvancement's "All Courses Sort" recommended)
-    const allCourses = document.getElementById('global_nav_courses_link');
-    if (allCourses) {
-        allCourses.onclick = function () {
-            window.location.href = this.href;
-            return false;
-        };
+    function updateCoursesLink() {
+        const allCourses = document.getElementById('global_nav_courses_link');
+        if (allCourses) {
+            allCourses.onclick = function () {
+                window.location.href = this.href;
+                return false;
+            };
+        }
     }
 
     // add a new button to clear all task list items
@@ -245,6 +247,19 @@
             .module_item_icons, .ig-details {
                 display: none !important
             }
+            #content-wrapper:has(#doc_preview) {
+                #content {
+                    padding-top: 12px;
+                    padding-right: 12px;
+                    padding-bottom: 0px;
+                }
+                h2 {
+                    display: none;
+                }
+                #sequence_footer {
+                    padding-top: 0;
+                }
+            }
         `);
 
         // link to the admin view as a reminder that more courses may exist
@@ -255,6 +270,44 @@
             adminButton.href = '/accounts';
             searchCoursesButton.parentNode.appendChild(adminButton);
         }
+    }
+
+    // file previews are quite small; try to improve this (see also the CSS above)
+    function moveFilePreviewHeader() {
+        if (!window.location.pathname.startsWith('/courses') || document.querySelector('#content-wrapper:has(#doc_preview)') === null) {
+            return;  // needs to be in a function to wait for doc load, but should only apply to docs on courses pages
+        }
+        waitForKeyElements('#sequence_footer', function (footer) {
+            const tryMove = () => {  // try to move the doc link (which may not be present yet)
+                const left = footer.querySelector('.module-sequence-footer-left');
+                if (!left) {
+                    return false;
+                }
+                if (footer.querySelector('.canvas-helpers-sequence-download-link')) {
+                    return true;  // avoid duplicate insertion
+                }
+                const wrapper = document.createElement('div');
+                wrapper.className = 'module-sequence-footer-center canvas-helpers-sequence-download-link';
+                const downloadLink = document.querySelector('#content > div');
+                if (downloadLink) {
+                    wrapper.appendChild(downloadLink);
+                    left.after(wrapper);
+                }
+                window.dispatchEvent(new Event('resize'));  // Canvas manually sets heights; we've changed, so trigger
+                return true;
+            };
+
+            // try moving immediately; fall back to waiting for the element to be added
+            if (tryMove()) {
+                return;
+            }
+            const contentObserver = new MutationObserver((mutations, observer) => {
+                if (tryMove()) {
+                    observer.disconnect();
+                }
+            });
+            contentObserver.observe(footer, {childList: true});
+        }, {waitOnce: false});
     }
 
     function hookGradeGrid() {
@@ -312,16 +365,20 @@
     // Because of this, we need to wait for the page body to load before using waitForKeyElements.
     // -----------------------------------------------------------------------------------------------------------------
     if (document.body) {
+        updateCoursesLink();
         addClearTaskListButton();
         addNewQuizAPIKeyButton();
         addStudioAPIKeyButton();
+        moveFilePreviewHeader();
     } else {
         const observer = new MutationObserver(function () {
             if (document.body) {
                 observer.disconnect();
+                updateCoursesLink();
                 addClearTaskListButton();
                 addNewQuizAPIKeyButton();
                 addStudioAPIKeyButton();
+                moveFilePreviewHeader();
             }
         });
         observer.observe(document.documentElement, {childList: true});

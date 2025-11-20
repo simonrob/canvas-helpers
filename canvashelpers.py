@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2025-11-06'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2025-11-20'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import csv
@@ -130,6 +130,12 @@ class Utils:
                                                type_hint='filtered course enrolments list')
 
     @staticmethod
+    def get_group_number(group_name):
+        """(Try to) extract the group number from a group name in a flexible way"""
+        group_number = re.search(r'\d+', group_name)
+        return int(group_number.group()) if group_number else int(group_name.split(' ')[-1])
+
+    @staticmethod
     def get_course_groups(course_group_tab_url, group_by='group_number'):
         # noinspection GrazieInspection
         """Get details of all groups within a group set. Pass the URL of the desired group set as shown in the web
@@ -182,12 +188,10 @@ class Utils:
                     print('WARNING: skipping course member not in any group:', row[csv_headers.index('login_id')])
                     continue
 
-                group_number = re.search(r'\d+', row[csv_headers.index('group_name')])
                 group_entry = {
                     'group_name': row[csv_headers.index('group_name')],
                     'group_id': row[csv_headers.index('canvas_group_id')],
-                    'group_number': int(group_number.group()) if group_number else int(
-                        row[csv_headers.index('group_name')].split(' ')[-1]),
+                    'group_number': Utils.get_group_number(row[csv_headers.index('group_name')]),
                     'student_number': row[csv_headers.index('login_id')],
                     'student_name': row[csv_headers.index('name')],
                     'student_canvas_id': row[csv_headers.index('canvas_user_id')]

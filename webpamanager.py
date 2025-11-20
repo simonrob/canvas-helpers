@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2025-06-23'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2025-11-20'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -729,7 +729,7 @@ class GroupResponseProcessor:
             print('\nFound quiz ID', quiz_id, '-', quiz['name'], 'with assignment ID', quiz['id'], 'due at',
                   quiz['due_at'])
 
-            current_group = int(quiz['name'].split('[')[-1].rstrip(']').split(' ')[-1])
+            current_group = Utils.get_group_number(quiz['name'])
             valid_members = [g['student_number'] for g in groups[current_group]]
             print('\tIdentified group', current_group, 'with expected members', valid_members)
 
@@ -918,7 +918,7 @@ class GroupResponseProcessor:
             quiz_id = quiz['id']
             print('\nFound new quiz with assignment ID', quiz_id, 'due at', quiz['due_at'])
 
-            current_group = int(quiz['name'].split('[')[-1].rstrip(']').split(' ')[-1])
+            current_group = Utils.get_group_number(quiz['name'])
             valid_members = [g['student_number'] for g in groups[current_group]]
             print('\tIdentified group', current_group, 'with expected members', valid_members)
 

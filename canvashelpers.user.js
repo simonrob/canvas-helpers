@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2025-11-17
+// @version      2025-11-20
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -71,24 +71,30 @@
 
     // for the Python-based New Quiz integrations, we need a separate API key - make retrieving this easier
     function addNewQuizAPIKeyButton() {
-        waitForKeyElements('div[role="main"] > div', function (container) {
-            const headerContainer = container.querySelector('div[data-automation="sdk-grading"]');
-            if (headerContainer) {
-                const existingButton = headerContainer.querySelector('button:first-of-type');
-                const newButton = existingButton.cloneNode(true);
-                newButton.querySelector('span[class$="baseButton__iconWrapper"]').remove(); // any existing icon
-                newButton.querySelector('span[class$="baseButton__children"]').textContent = 'Display/copy New Quiz API token';
-                newButton.addEventListener('click', function () {
-                    navigator.clipboard.writeText(window.sessionStorage.access_token).catch((e) => {
-                        logCHMessage('Unable to copy to clipboard:', e);
-                    });
-                    alert('Your current New Quiz API bearer token is:\n\n' + window.sessionStorage.access_token +
-                        '\n\nThis token has been copied to the clipboard to use as the `new_quiz_lti_bearer_token` value ' +
-                        'for Canvas Helpers New Quiz scripts.');
-                });
-                existingButton.after(newButton);
-            }
-        }, {waitOnce: false});
+        waitForKeyElements('#root', function (container) {
+            new MutationObserver((mutations, observer) => {
+                const pageContainer = document.querySelector('div.pageContent');
+                if (pageContainer) {
+                    const existingButton = pageContainer.querySelector('button[data-automation="print-results-button"]');
+                    if (existingButton) {
+                        observer.disconnect();  // prevent recursion
+                        const newButton = existingButton.cloneNode(true);
+                        newButton.removeAttribute('data-automation'); // prevent re
+                        newButton.querySelector('span[class$="baseButton__iconWrapper"]').remove(); // any existing icon
+                        newButton.querySelector('span[class$="baseButton__children"]').textContent = 'Display/copy New Quiz API token';
+                        newButton.addEventListener('click', function () {
+                            navigator.clipboard.writeText(window.sessionStorage.access_token).catch((e) => {
+                                logCHMessage('Unable to copy to clipboard:', e);
+                            });
+                            alert('Your current New Quiz API bearer token is:\n\n' + window.sessionStorage.access_token +
+                                '\n\nThis token has been copied to the clipboard to use as the ' +
+                                '`new_quiz_lti_bearer_token` value for Canvas Helpers New Quiz scripts.');
+                        });
+                        existingButton.after(newButton);
+                    }
+                }
+            }).observe(container, {childList: true, subtree: true});
+        }, {waitOnce: true});
     }
 
     // for the Python-based Studio integrations, we need a separate domain and API key - make retrieving this easier

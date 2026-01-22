@@ -8,14 +8,16 @@ limitation, exporting all responses to a single spreadsheet."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2024-04-17'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-01-22'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
+import html
 import json
 import os
 import re
 import sys
 
+import openpyxl.styles
 import openpyxl.utils
 import requests.structures
 
@@ -151,6 +153,10 @@ for user_session_id in user_session_ids:
         question_id = question['item']['id']
         question_type = question['item']['user_response_type']
         question_title = question['item']['title']
+        if not question_title:
+            question_title = question['item']['item_body']
+            if question_title:
+                question_title = re.sub(HTML_REGEX, '', question_title)
 
         if not spreadsheet_headers_set:
             spreadsheet_headers.append(question_title)
@@ -174,13 +180,13 @@ for user_session_id in user_session_ids:
                     elif type(raw_answer) is dict:  # formula questions
                         answer_text = raw_answer['user_response']
                     else:  # essay questions
-                        answer_text = re.sub(HTML_REGEX, '', raw_answer)
+                        answer_text = html.unescape(re.sub(HTML_REGEX, '', raw_answer))
 
                     print(answer_text)
                     spreadsheet[
                         '%s%d' % (openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
                 else:
-                    print('ERROR: no response value found for', question_type, 'question', question_id)
+                    print('WARNING: no response value found for', question_type, 'question', question_id)
 
             elif question_type == 'Boolean':
                 for value in current_answer['scored_data']['value']:
@@ -212,7 +218,7 @@ for user_session_id in user_session_ids:
                     spreadsheet['%s%d' % (
                         openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = answer_text
                 else:
-                    print('ERROR: no response value found for', question_type, 'question', question_id)
+                    print('WARNING: no response value found for', question_type, 'question', question_id)
                     spreadsheet['%s%d' % (
                         openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = ''
 
@@ -243,7 +249,7 @@ for user_session_id in user_session_ids:
                         openpyxl.utils.get_column_letter(current_column),
                         spreadsheet_row)] = 'DATA MISSING - NOT YET EXPORTED'
                 else:
-                    print('ERROR: no response value found for', question_type, 'question', question_id)
+                    print('WARNING: no response value found for', question_type, 'question', question_id)
                     spreadsheet['%s%d' % (
                         openpyxl.utils.get_column_letter(current_column), spreadsheet_row)] = ''
 
@@ -273,6 +279,28 @@ for user_session_id in user_session_ids:
             spreadsheet['%s1' % column_letter] = spreadsheet_headers[header_number - 1]
         spreadsheet_headers_set = True
     spreadsheet_row += 1
+
+header_border = openpyxl.styles.borders.Border(
+    left=openpyxl.styles.borders.Side(border_style=openpyxl.styles.borders.BORDER_THIN, color='00000000'),
+    right=openpyxl.styles.borders.Side(border_style=openpyxl.styles.borders.BORDER_THIN, color='00000000'),
+    top=openpyxl.styles.borders.Side(border_style=openpyxl.styles.borders.BORDER_THIN, color='00000000'),
+    bottom=openpyxl.styles.borders.Side(border_style=openpyxl.styles.borders.BORDER_THIN, color='00000000')
+)
+header_fill = openpyxl.styles.PatternFill(start_color='00E7E6E6', end_color='00E7E6E6', fill_type='solid')
+header_font = openpyxl.styles.Font(bold=True)
+first_row_seen = False
+for response_row in spreadsheet.iter_rows():
+    if not first_row_seen:
+        for cell in response_row:
+            cell.border = header_border
+            cell.fill = header_fill
+            cell.font = header_font
+            first_row_seen = True
+
+    for cell in response_row[0:2]:
+        cell.border = header_border
+        cell.fill = header_fill
+        cell.font = header_font
 
 workbook.save(OUTPUT_FILE)
 print('\nSaved', (spreadsheet_row - 2), 'quiz responses to', OUTPUT_FILE)

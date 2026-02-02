@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2026-01-22
+// @version      2026-02-02
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -206,7 +206,8 @@
     // to use this, open the browser console and call addCustomCard(), then enter the JSON for the new card
     // minimal example custom card JSON:
     // {"shortName": "CS Final Year Projects", "courseCode": "CSP300/CSP301/CSP302/CSP344/CSP354", "href": "/courses/60749", "image": "https://canvas.swansea.ac.uk/images/thumbnails/9309152/", "published": true, "assetString": "course_60749", "position": -1}
-    unsafeWindow.addCustomCard = function () {
+    const customCardScope = typeof unsafeWindow === 'undefined' ? window : unsafeWindow;
+    customCardScope.addCustomCard = function () {
         fetch(custom_data_url + '?ns=canvas-helpers').then(r => r.json()).then(d => {
             let arr = JSON.parse(d.data || '[]');
             const new_card = prompt('Paste your new dashboard item as JSON (see this script\'s source for an example).\n\nEnter "CLEAR" to remove all custom cards.\n\nForce-refresh the page to apply your changes:');

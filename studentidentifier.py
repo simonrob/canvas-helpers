@@ -140,13 +140,14 @@ if args.export_groups_page:
 
         export_html += '<tr%s>' % (' style="background-color: #e9e9e9;"' if even else '')
         export_html += '<td><a href="https://canvas.swansea.ac.uk/groups/52045">%s</a></td>' % group_name
-        export_html += '<td><a href="mailto:%s">Email Group %d</a></td>' % (group_email, group_number)
+        export_html += '<td><a href="mailto:%s">Email Group %d</a></td>' % (group_email.rstrip(','), group_number)
         export_html += group_html + '</tr>'
         even = not even
 
     with open(args.export_groups_page, 'w') as export_file:
         export_file.write('<table width="100%%" cellpadding="6px">%s</table>' % export_html)
     print('Exported groups page HTML to', args.export_groups_page)
+
 
 # add a group number where requested - separated for easier format customisation
 def get_column_content(user_identifier):

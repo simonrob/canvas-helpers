@@ -1,6 +1,7 @@
 """Canvas sometimes seems to try quite hard to hide the fact that students typically have an institutional identifier
 (i.e., student number; also often called login ID) that is different to their Canvas ID. This script adds a new custom
-column in a course's Gradebook that shows student numbers and, optionally, group names.
+column in a course's Gradebook that shows student numbers and, optionally, group names. A separate option provides a
+HTML-formatted version of the group list and contact details that can be used to create a dedicated course groups page.
 
 Notes:
     - Canvas courses have a hidden custom gradebook column called 'Notes' that is private to the course teacher, and
@@ -14,7 +15,7 @@ Notes:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2025-11-06'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-02-10'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -36,6 +37,10 @@ def get_args():
                         help='Add the name/number of a group that the student is part of (limit: one group set at '
                              'once). To do this, please pass the URL of the groups page that shows the group set you '
                              'wish to use (e.g., https://canvas.swansea.ac.uk/courses/[course-id]/groups#tab-[set-id])')
+    parser.add_argument('--export-groups-page', default=None,
+                        help='Export an HTML-formatted version of the course groups list, including contact details, '
+                             'that can be used to create a dedicated course groups page. The value for this option '
+                             'should be a file path to save the output to (e.g., "groups.html")')
     parser.add_argument('--dry-run', action='store_true',
                         help='Preview the script\'s actions without actually making any changes. Highly recommended!')
     return parser.parse_args()
@@ -98,6 +103,50 @@ if not course_user_response:
 
 course_user_json = json.loads(course_user_response)
 
+# export groups page if requested
+if args.export_groups_page:
+    _, course_groups = Utils.get_course_groups(args.add_group_name, group_by='group_number')  # easier than reformatting
+    max_group_size = 0
+    for group_number, group_info in course_groups.items():
+        if len(group_info) > max_group_size:
+            max_group_size = len(group_info)
+
+    export_html = '<thead>'
+    export_html += '<tr style="color: #fff; background-color: #242f60;">'
+    export_html += '<th align="left">Canvas Homepage</th>'
+    export_html += '<th align="left">Group Email</th>'
+    for i in range(1, max_group_size + 1):
+        export_html += '<th align="left">Person %d</th>' % i
+    export_html += '</tr>'
+    export_html += '</thead>'
+
+    even = False
+    for group_number, group_info in course_groups.items():
+        group_name = ''
+        group_email = ''
+        group_html = ''
+        for member in group_info:
+            member_email = ''
+            for user in course_user_json:  # simpler to just loop inefficiently rather than building a map
+                if user['login_id'] == member['student_number']:
+                    member_email = user['email']
+                    break
+            group_name = member['group_name']
+            group_email += member_email + ','
+            group_html += '<td><a href="mailto:%s">%s</a></td>' % (member_email, member['student_number'])
+
+        if len(group_info) < max_group_size:
+            group_html += '<td></td>' * (max_group_size - len(group_info))
+
+        export_html += '<tr%s>' % (' style="background-color: #e9e9e9;"' if even else '')
+        export_html += '<td><a href="https://canvas.swansea.ac.uk/groups/52045">%s</a></td>' % group_name
+        export_html += '<td><a href="mailto:%s">Email Group %d</a></td>' % (group_email, group_number)
+        export_html += group_html + '</tr>'
+        even = not even
+
+    with open(args.export_groups_page, 'w') as export_file:
+        export_file.write('<table width="100%%" cellpadding="6px">%s</table>' % export_html)
+    print('Exported groups page HTML to', args.export_groups_page)
 
 # add a group number where requested - separated for easier format customisation
 def get_column_content(user_identifier):

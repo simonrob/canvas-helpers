@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2025-11-20'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-02-11'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -1196,7 +1196,7 @@ WORKING_DIRECTORY = os.path.join(working_directory, str(group_id))
 if args.setup and args.setup == 'spreadsheet' and os.path.exists(WORKING_DIRECTORY):
     print('ERROR: WebPA setup output directory', WORKING_DIRECTORY, 'already exists - please remove or rename')
     sys.exit()
-if not (args.setup and args.setup == 'quiz' and not args.setup_quiz_export_links):
+if not (args.setup and args.setup == 'quiz' and not args.setup_quiz_export_links) and not args.dry_run:
     os.makedirs(WORKING_DIRECTORY, exist_ok=True)
 
 # setup mode - generate empty templates, either personalised per student or general per group

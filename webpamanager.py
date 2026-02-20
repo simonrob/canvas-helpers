@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2026-02-11'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-02-20'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -580,6 +580,8 @@ class GroupResponseProcessor:
             if group_properties['name'] == group_name:
                 return group_properties['id']
 
+        return None
+
     @staticmethod
     def create_assignment_group(new_group_name):
         group_creation_response = requests.post('%s/assignment_groups' % COURSE_URL,
@@ -978,12 +980,6 @@ class GroupResponseProcessor:
                 print('\tNo valid submissions found for new quiz', quiz_id, '- skipping')
                 continue
 
-            current_responses = []
-            current_errors = []
-            current_total = 0
-            found_members = []
-            invalid_response = False
-
             lti_api_root = root_instructure_domain % (lti_institution_subdomain, 'lti', lti_environment_type)
             quiz_api_root = root_instructure_domain % (lti_institution_subdomain, 'api', lti_environment_type)
 
@@ -992,6 +988,12 @@ class GroupResponseProcessor:
             token_headers['authorization'] = ('%s' if 'Bearer ' in lti_bearer_token else 'Bearer %s') % lti_bearer_token
 
             for session in user_session_map:
+                current_responses = []
+                current_errors = []
+                current_total = 0
+                found_members = []
+                invalid_response = False
+
                 print('\t\tLoading new quiz session', session)
                 token_response = requests.get(
                     '%s/participant_sessions/%s/grade' % (lti_api_root, session['session_id']), headers=token_headers)

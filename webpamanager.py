@@ -29,13 +29,14 @@ Example usage:
    original assignment"""
 
 __author__ = 'Simon Robinson'
-__copyright__ = 'Copyright (c) 2024 Simon Robinson'
+__copyright__ = 'Copyright (c) 2026 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2026-02-20'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-03-12'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
 import datetime
+import html
 import json
 import math
 import os
@@ -584,6 +585,8 @@ class GroupResponseProcessor:
 
     @staticmethod
     def create_assignment_group(new_group_name):
+        # note that unlike for assignments themselves, we can't hide assignment groups in the Gradebook, but they
+        # can be hidden manually by enabling the "Hide Assignment Group Totals" in the Gradebook's view settings
         group_creation_response = requests.post('%s/assignment_groups' % COURSE_URL,
                                                 data={'name': new_group_name},
                                                 headers=Utils.canvas_api_headers())
@@ -861,7 +864,8 @@ class GroupResponseProcessor:
                             invalid_response = True
 
                     elif answer_value and answer_value.lower().strip() != 'none':
-                        print('\t\tWARNING: Comments from', current_rater_name, ':', answer_value.replace('\n', ' '))
+                        print('\t\tWARNING: Comments from', current_rater_name, ':',
+                              html.unescape(answer_value).replace('\n', ' ').strip())
 
                 # finally, check for errors and collate responses
                 # noinspection DuplicatedCode
@@ -1098,7 +1102,7 @@ class GroupResponseProcessor:
                             answer_text = re.sub(html_regex, '', raw_answer)
                             if answer_text and answer_text.lower().strip() != 'none':
                                 print('\t\t\tWARNING: Comments from', current_rater_name, ':',
-                                      answer_text.replace('\n', ' '))
+                                      html.unescape(answer_text).replace('\n', ' ').strip())
 
                 # finally, check for errors and collate responses
                 # noinspection DuplicatedCode

@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2026 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2026-03-12'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-06-08'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -133,9 +133,17 @@ def get_args():
 
     group_processing = parser.add_argument_group(title='Processing. The following options only apply when `--setup` '
                                                        'mode is not active')
-    group_processing.add_argument('--marks-file', required='--setup' not in ''.join(sys.argv),
+    group_processing.add_argument('--marks-file',
+                                  required='--setup' not in ''.join(sys.argv) and
+                                           '--simulate-marks' not in ''.join(sys.argv),
                                   help='An XLSX or CSV file containing a minimum of two columns: student number (or '
                                        'group name) and original (unscaled) mark, in that order')
+    group_processing.add_argument('--simulate-marks',
+                                  required='--setup' not in ''.join(sys.argv) and
+                                           '--marks-file' not in ''.join(sys.argv), action='store_true',
+                                  help='Set this option to simulate all marks at 50% of the --maximum-mark value. '
+                                       'Useful for testing contribution quiz submissions before marking has been '
+                                       'completed. Required if --marks-file is not set; ignored otherwise.')
     group_processing.add_argument('--minimum-variance', type=float, default=0.2,
                                   help='The minimum WebPA variance level at which contribution ratings will be used to '
                                        'adjust marks. Default: 0.2')
@@ -1236,6 +1244,10 @@ if args.setup:
 # processing mode - first load the marks to use as the baseline
 marks_map = {}
 if args.marks_file:
+    if args.simulate_marks:
+        print('WARNING: mark simulation requested, but a marks mapping file has been provided; aborting (please remove',
+              'either the --marks-file or the --simulate-marks options)')
+        sys.exit()
     marks_file = os.path.join(WORKING_DIRECTORY, args.marks_file)
     marks_map = Utils.get_marks_mapping(marks_file)
     if marks_map:
@@ -1244,6 +1256,10 @@ if args.marks_file:
         print('ERROR: marks mapping file', args.marks_file, 'empty or not found in assignment directory at', marks_file,
               '- aborting')
         sys.exit()
+
+if args.simulate_marks and not args.marks_file:
+    print('\nWARNING: simulating marks for all users/groups at 50% of maximum mark of', args.maximum_mark, '=',
+          args.maximum_mark / 2)
 
 # next, load responses and create a master spreadsheet containing all rater responses (for, e.g., manual verification)
 response_summary_workbook = openpyxl.Workbook()
@@ -1263,6 +1279,13 @@ else:
 if len(respondent_list) <= 0:
     print('\nERROR: unable to continue; no valid WebPA responses to analyse')
     sys.exit()
+
+if args.simulate_marks and not args.marks_file:
+    # reiterate warning as it is a potential footgun
+    print('\nWARNING: simulating marks for all users/groups at 50% of maximum mark of', args.maximum_mark, '=',
+          args.maximum_mark / 2)
+    for student in submission_students:
+        marks_map[student] = args.maximum_mark / 2
 
 response_summary_file = os.path.join(WORKING_DIRECTORY, 'webpa-response-summary.xlsx')
 response_summary_workbook.save(response_summary_file)
@@ -1384,7 +1407,8 @@ if args.context_summaries:
 
 writer.close()
 
-print('\nSuccessfully calculated WebPA scores and saved calculation to', output_file, '- summary:')
+print('\nSuccessfully calculated ', ('**SIMULATED**' if args.simulate_marks and not args.marks_file else ''),
+      'WebPA scores and saved calculation to', output_file, '- summary:')
 print(response_data)
 
 # because we add comments using openpyxl, we need to reopen the workbook to save the final version with comments
@@ -1403,4 +1427,5 @@ if args.context_summaries:
 else:
     result_summary = response_data.filter(['Subject', 'Mark'], axis=1)
     result_summary.to_excel(scaled_marks_file, sheet_name=scaled_marks_title)
-print('Saved WebPA-adjusted marks to', scaled_marks_file)
+print('Saved', ('**SIMULATED**' if args.simulate_marks and not args.marks_file else ''), 'WebPA-adjusted marks to',
+      scaled_marks_file)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Canvas Helpers
 // @namespace    https://github.com/simonrob/canvas-helpers
-// @version      2026-02-02
+// @version      2026-06-08
 // @updateURL    https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @downloadURL  https://github.com/simonrob/canvas-helpers/raw/main/canvashelpers.user.js
 // @require      https://gist.githubusercontent.com/raw/51e2fe655d4d602744ca37fa124869bf/GM_addStyle.js
@@ -348,7 +348,10 @@
                         header.addEventListener('click', () => {
                             const gridData = grid.getData();
                             const asc = header.dataset.sortAscending === 'true';
-                            gridData.sort((a, b) => (a[notesColumn.field] > b[notesColumn.field] ? (asc ? 1 : -1) : (asc ? -1 : 1)));
+                            gridData.sort((a, b) => asc
+                                ? a[notesColumn.field].localeCompare(b[notesColumn.field], undefined, {numeric: true})
+                                : b[notesColumn.field].localeCompare(a[notesColumn.field], undefined, {numeric: true})
+                            );
                             grid.setSortColumn(notesColumn.id, asc);
                             grid.invalidate();
                             grid.render();

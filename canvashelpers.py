@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2025-11-20'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-11-18'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import csv
@@ -166,11 +166,13 @@ class Utils:
                       '(error:', group_set_response.text, ')')
                 sys.exit()
 
-        group_cache_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        # Canvas returns the CSV response without a charset, so requests defaults to ISO-8859-1 - force UTF-8 (and strip any BOM)
+        group_set_response.encoding = 'utf-8-sig'
+        group_cache_file = tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False)
         cache_file_name = group_cache_file.name
         group_cache_file.write(group_set_response.text)
         group_cache_file.close()
-        with open(cache_file_name) as group_cache_file:
+        with open(cache_file_name, encoding='utf-8', newline='') as group_cache_file:
             reader = csv.reader(group_cache_file)
             for row in reader:
                 if not csv_headers:

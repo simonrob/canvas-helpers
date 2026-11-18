@@ -18,17 +18,28 @@ import requests.structures
 
 
 class Config:
-    FILE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'canvashelpers.config')
+    # `canvashelpers.config` is a template demonstrating default values and documentation; actual personal configuration values (in particular, API
+    # tokens) should be placed in `canvashelpers.local.config` (ignored by git), which overides the template
+    _SCRIPT_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+    TEMPLATE_FILE_PATH = os.path.join(_SCRIPT_DIRECTORY, 'canvashelpers.config')
+    LOCAL_FILE_PATH = os.path.join(_SCRIPT_DIRECTORY, 'canvashelpers.local.config')
+    FILE_PATH = LOCAL_FILE_PATH  # the file users should edit (referred to in error messages)
+    SECTION_NAME = 'Canvas helpers configuration file'
 
     configparser = configparser.ConfigParser()
-    configparser.read(FILE_PATH)
-    SETTINGS = configparser[configparser.sections()[0]]
+    configparser.read([TEMPLATE_FILE_PATH, LOCAL_FILE_PATH])
+    if not configparser.has_section(SECTION_NAME):  # a bit hacky, but this is the only way to check if the right section exists in either file
+        print('ERROR: unable to load configuration from', TEMPLATE_FILE_PATH, 'or', LOCAL_FILE_PATH,
+              '- please make sure that at least one of these files exists and contains the section header',
+              '[%s]' % SECTION_NAME)
+        sys.exit(1)
+    SETTINGS = configparser[SECTION_NAME]
 
-    API_TOKEN = SETTINGS['canvas_api_token']  # all scripts need this token; only a subset need the full settings below
+    API_TOKEN = SETTINGS.get('canvas_api_token', '')  # all scripts need this token; only a subset need the full settings below
 
-    if API_TOKEN.startswith('*** your'):
-        print('WARNING: API token in', FILE_PATH, 'seems to contain the example value - please make sure you have',
-              'added your own token')
+    if not API_TOKEN or API_TOKEN.startswith('*** your'):
+        print('WARNING: no Canvas API token found - please add your own token (and any other personal settings) to',
+              LOCAL_FILE_PATH, '(see', TEMPLATE_FILE_PATH, 'for instructions)')
 
     @staticmethod
     def get_settings():
@@ -79,28 +90,36 @@ class Utils:
     def canvas_multi_page_request(current_request_url, params=None, type_hint='API'):
         """Retrieve a full (potentially multi-page) response from the Canvas API. If the initial response refers to
         subsequent pages of results, these are loaded and concatenated automatically. For (slightly) more specific
-        progress/error messages, set type_hint to a string describing the API call that is being made """
-        if not params:
-            params = {}
-        params['per_page'] = 100
-        response = '[]'
+        progress/error messages, set type_hint to a string describing the API call that is being made. Returns a string
+        that can be parsed as a JSON list, or None on failure"""
+        current_params = dict(params) if params else {}  # copy so that we never modify the caller's dict
+        current_params['per_page'] = 100
+        combined_results = []
         while True:
             print('Requesting', type_hint, 'page:', current_request_url)
-            current_response = requests.get(current_request_url, params=params, headers=Utils.canvas_api_headers())
+            current_response = requests.get(current_request_url, params=current_params, headers=Utils.canvas_api_headers())
             if current_response.status_code != 200:
                 print('ERROR: unable to load complete', type_hint, 'response - status code',
                       current_response.status_code)
                 return None
 
-            response = response[:-1] + ',' + current_response.text[1:]
+            try:
+                page_results = current_response.json()
+            except ValueError:
+                print('ERROR: unable to parse', type_hint, 'response page as JSON:', current_response.text[:200])
+                return None
+            if not isinstance(page_results, list):
+                print('ERROR: expected a list from paginated', type_hint, 'request, but received:', page_results)
+                return None
+            combined_results.extend(page_results)
 
-            # see: https://canvas.instructure.com/doc/api/file.pagination.html
-            page_links = current_response.headers['Link'] if 'Link' in current_response.headers else ''
-            next_page_match = re.search(r',\s*<(?P<next>.*?)>;\s*rel="next"', page_links)
-            if next_page_match:
-                current_request_url = next_page_match.group('next')
-            else:
-                return '[' + response[2:]
+            # see: https://canvas.instructure.com/doc/api/file.pagination.html - the `next` link already includes all
+            # of the original query parameters, so these must not be added again for subsequent pages
+            next_page_url = current_response.links.get('next', {}).get('url')
+            if not next_page_url:
+                return json.dumps(combined_results)
+            current_request_url = next_page_url
+            current_params = None
 
     @staticmethod
     def get_course_users(course_url, includes=None, enrolment_types=None):

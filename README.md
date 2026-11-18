@@ -18,7 +18,10 @@ The hope regarding these tools, however, is that you will find that going back t
 ### Getting started
 Begin by cloning or downloading the contents of this repository, then installing the scripts' requirements via `python -m pip install -r requirements.txt` (see [below](https://github.com/simonrob/canvas-helpers#requirements) for further details and special cases).
 
-Next, obtain a Canvas API key from your account's Settings page and add this in [canvashelpers.config](https://github.com/simonrob/canvas-helpers/blob/main/canvashelpers.config).
+Next, make a copy of `canvashelpers.config` and name it `canvashelpers.local.config`.
+Make sure the copy is in the same folder as the rest of this repository's contents.
+Then, obtain an API key from your Canvas account's Settings page, and add this as the value for `canvas_api_token` in the file you just created.
+Any other settings documented in the [configuration file](https://github.com/simonrob/canvas-helpers/blob/main/canvashelpers.config) can be overridden in the same way.
 
 Once set up is complete, read the descriptions below to get started.
 Each script also has a `--help` option that provides further detail.

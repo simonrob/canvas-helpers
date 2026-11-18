@@ -133,3 +133,9 @@ versions
 temp
 .idea
 *.iml
+
+# personal configuration (API tokens etc.) - see canvashelpers.config for the template this overrides
+canvashelpers.local.config
+
+# working/output directories, which are by default created in this directory and named after numerical Canvas course/assignment/group set IDs
+/[0-9]*/

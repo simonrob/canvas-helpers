@@ -3,7 +3,7 @@
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2026-11-18'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-11-23'  # ISO 8601 (YYYY-MM-DD)
 
 import configparser
 import csv
@@ -14,6 +14,7 @@ import sys
 import tempfile
 
 import openpyxl
+import openpyxl.utils
 import requests.structures
 
 
@@ -367,20 +368,52 @@ class Utils:
                          'student_name': submission['user']['name']}
         return submitter
 
+    MARKS_FILE_FORMAT_HINT = ('Marks files are read by column position, ignoring any headers. Column A must be the '
+                              'student number (or group name); column B must be a numeric mark (use a negative value '
+                              'such as -1 to add a comment without a mark); and, column C can optionally contain a '
+                              'comment to be added to the submission. Rows whose column B is not a number (such as a '
+                              'header row) are skipped')
+
     @staticmethod
     def get_marks_mapping(marks_file):
+        """Load a marks file, printing an explanation about any issues encountered while parsing"""
         marks_map = {}
-        if os.path.exists(marks_file):
+        if not os.path.exists(marks_file):
+            print('ERROR: marks file not found at', marks_file)
+            return marks_map
+
+        try:
             if marks_file.lower().endswith('.xlsx'):
                 marks_workbook = openpyxl.load_workbook(marks_file)
                 marks_sheet = marks_workbook[marks_workbook.sheetnames[0]]
-                for row in marks_sheet.iter_rows():
-                    Utils.parse_marks_file_row(marks_map, [entry.value for entry in row])
+                rows = [list(row) for row in marks_sheet.iter_rows(values_only=True)]
             else:
-                with open(marks_file, newline='') as marks_csv:
-                    reader = csv.reader(marks_csv)
-                    for row in reader:
-                        Utils.parse_marks_file_row(marks_map, row)
+                with open(marks_file, newline='', encoding='utf-8-sig') as marks_csv:  # -sig: strip any Excel BOM
+                    rows = list(csv.reader(marks_csv))
+        except Exception as e:
+            print('ERROR: marks file', marks_file, 'was found, but could not be read as %s:' % (
+                'an XLSX spreadsheet' if marks_file.lower().endswith('.xlsx') else 'a CSV file'), repr(e))
+            return marks_map
+
+        rows = [row for row in rows if any(cell not in (None, '') for cell in row)]  # ignore blank rows
+        skipped_rows = [row for row in rows if not Utils.parse_marks_file_row(marks_map, row)]
+
+        def show_row(row):
+            return ', '.join('%s=%r' % (openpyxl.utils.get_column_letter(i + 1), cell) for i, cell in
+                             enumerate(row[:4])) + (', …' if len(row) > 4 else '')
+
+        if not marks_map:
+            print('ERROR: marks file', marks_file, 'was found, but none of its', len(rows), 'rows could be used.',
+                  Utils.MARKS_FILE_FORMAT_HINT)
+            for row in rows[:3]:
+                print('\tFound row:', show_row(row))
+            if any(len(row) < 2 for row in rows):
+                print('\tSome rows have fewer than two columns - is the mark column missing?')
+        elif len(skipped_rows) > 1 or (skipped_rows and skipped_rows[0] is not rows[0]):  # a header row is expected
+            print('WARNING: skipped', len(skipped_rows), 'rows in marks file', marks_file,
+                  'with an empty column A, or a non-numeric column B, including:')
+            for row in skipped_rows[:5]:
+                print('\t', show_row(row))
         return marks_map
 
     @staticmethod
@@ -423,16 +456,18 @@ class Utils:
         # ultra-simplistic check to avoid any header rows (headers are not normally numeric)
         try:
             grade = float(row[1])
-        except (ValueError, TypeError):
-            return
+        except (ValueError, TypeError, IndexError):
+            return False
 
-        student_number_or_group_name = str(row[0])
+        if row[0] is None or str(row[0]).strip() == '':
+            return False
+        student_number_or_group_name = str(row[0]).strip()
         marks_map_entry = {'mark': grade}
         if len(row) > 2 and row[2]:  # individual comment is optional
             marks_map_entry['comment'] = row[2]
 
-        if student_number_or_group_name:
-            marks_map[student_number_or_group_name] = marks_map_entry
+        marks_map[student_number_or_group_name] = marks_map_entry
+        return True
 
 
 class Args:

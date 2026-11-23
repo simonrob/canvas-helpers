@@ -5,7 +5,7 @@ lets you upload a set of attachments, feedback comments and marks in bulk."""
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2024 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2025-03-12'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-11-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import json
@@ -105,8 +105,8 @@ if args.marks_file:
     if marks_map:
         print('Loaded marks/feedback mapping for', len(marks_map), 'submissions:', marks_map)
     else:
-        print('Ignoring marks file argument', args.marks_file, '- empty or not found in assignment directory at',
-              marks_file)
+        print('WARNING: ignoring marks file argument', args.marks_file, '- no marks or comments could be loaded from',
+              marks_file, '(see above for details)')
 
 assignment_details_response = requests.get(ASSIGNMENT_URL, headers=Utils.canvas_api_headers())
 if assignment_details_response.status_code != 200:

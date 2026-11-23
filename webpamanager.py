@@ -31,7 +31,7 @@ Example usage:
 __author__ = 'Simon Robinson'
 __copyright__ = 'Copyright (c) 2026 Simon Robinson'
 __license__ = 'Apache 2.0'
-__version__ = '2026-06-08'  # ISO 8601 (YYYY-MM-DD)
+__version__ = '2026-11-23'  # ISO 8601 (YYYY-MM-DD)
 
 import argparse
 import contextlib
@@ -1253,8 +1253,8 @@ if args.marks_file:
     if marks_map:
         print('Loaded original marks mapping for', len(marks_map), 'submissions:', marks_map)
     else:
-        print('ERROR: marks mapping file', args.marks_file, 'empty or not found in assignment directory at', marks_file,
-              '- aborting')
+        print('ERROR: unable to load any marks from marks mapping file', args.marks_file, 'at', marks_file,
+              '(see above for details) - aborting')
         sys.exit()
 
 if args.simulate_marks and not args.marks_file:
